@@ -426,22 +426,27 @@ jobs:
           macho_files="$(find "$app" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && echo "$1"' _ {} \;)"
           echo "--- Mach-O files ---"
           printf '%s\n' "$macho_files"
-          symbols_log="$(mktemp)"
-          for file in $macho_files; do nm "$file" 2>/dev/null || true; done > "$symbols_log"
+          exported_symbols="$(mktemp)"
+          for file in $macho_files; do nm -gU "$file" 2>/dev/null || true; done > "$exported_symbols"
 
+          # The symbols have to be exported, not merely present: the managed library resolves them with dlsym
+          # on the main program handle. The Apple SDK passes -exported_symbols_list to the linker, so the
+          # package targets export them explicitly.
           missing=0
           for symbol in _vpx_codec_decode _I420AlphaToARGBMatrix _kYuvI601Constants _lvpx_yuv_constants; do
-            if grep -m1 " $symbol\$" "$symbols_log"; then
+            if grep -m1 " $symbol\$" "$exported_symbols"; then
               continue
             fi
-            echo "missing symbol: $symbol" >&2
+            echo "missing exported symbol: $symbol" >&2
             missing=1
           done
           if [ "$missing" -ne 0 ]; then
-            echo "--- symbol dump (vpx and yuv names) ---"
-            grep -iE 'vpx|yuv' "$symbols_log" | head -20 || true
-            echo "--- native reference evidence from the build log ---"
-            grep -nE 'force_load|libvpx\.a|libyuv\.a|lvpxshim|static/ios' build.log | head -20 || true
+            echo "--- exported symbol dump (vpx and yuv names) ---"
+            grep -iE 'vpx|yuv' "$exported_symbols" | head -20 || true
+            echo "--- every symbol (including local) with vpx or yuv names ---"
+            for file in $macho_files; do nm "$file" 2>/dev/null || true; done | grep -iE 'vpx|yuv' | head -20 || true
+            echo "--- linker flag evidence from the build log ---"
+            grep -nE 'force_load|exported_symbol|libvpx\.a|libyuv\.a|lvpxshim|static/ios' build.log | head -20 || true
             exit 1
           fi
       - uses: actions/upload-artifact@v4
@@ -538,22 +543,27 @@ jobs:
           macho_files="$(find "$app" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && echo "$1"' _ {} \;)"
           echo "--- Mach-O files ---"
           printf '%s\n' "$macho_files"
-          symbols_log="$(mktemp)"
-          for file in $macho_files; do nm "$file" 2>/dev/null || true; done > "$symbols_log"
+          exported_symbols="$(mktemp)"
+          for file in $macho_files; do nm -gU "$file" 2>/dev/null || true; done > "$exported_symbols"
 
+          # The symbols have to be exported, not merely present: the managed library resolves them with dlsym
+          # on the main program handle. The Apple SDK passes -exported_symbols_list to the linker, so the
+          # package targets export them explicitly.
           missing=0
           for symbol in _vpx_codec_decode _I420AlphaToARGBMatrix _kYuvI601Constants _lvpx_yuv_constants; do
-            if grep -m1 " $symbol\$" "$symbols_log"; then
+            if grep -m1 " $symbol\$" "$exported_symbols"; then
               continue
             fi
-            echo "missing symbol: $symbol" >&2
+            echo "missing exported symbol: $symbol" >&2
             missing=1
           done
           if [ "$missing" -ne 0 ]; then
-            echo "--- symbol dump (vpx and yuv names) ---"
-            grep -iE 'vpx|yuv' "$symbols_log" | head -20 || true
-            echo "--- native reference evidence from the build log ---"
-            grep -nE 'force_load|libvpx\.a|libyuv\.a|lvpxshim|static/maccatalyst' build.log | head -20 || true
+            echo "--- exported symbol dump (vpx and yuv names) ---"
+            grep -iE 'vpx|yuv' "$exported_symbols" | head -20 || true
+            echo "--- every symbol (including local) with vpx or yuv names ---"
+            for file in $macho_files; do nm "$file" 2>/dev/null || true; done | grep -iE 'vpx|yuv' | head -20 || true
+            echo "--- linker flag evidence from the build log ---"
+            grep -nE 'force_load|exported_symbol|libvpx\.a|libyuv\.a|lvpxshim|static/maccatalyst' build.log | head -20 || true
             exit 1
           fi
       - uses: actions/upload-artifact@v4

@@ -7,27 +7,43 @@
 		ForceLoad keeps every object file, because the managed decoder resolves the functions at run time
 		instead of referencing them at link time. libyuv is C++ and needs the C++ runtime (IsCxx).
 
+		The iOS and Mac Catalyst link runs with -exported_symbols_list (a list that the Apple SDK generates),
+		so a library that is only force loaded stays hidden and dlsym cannot find its symbols. LinkerFlags
+		therefore exports every entry point that the managed decoder looks up at run time. They are added to
+		the SDK list, not instead of it.
+
 		Only arm64 slices are shipped: iOS device (ios-arm64), the Apple silicon simulator
 		(iossimulator-arm64) and Mac Catalyst (maccatalyst-arm64). Intel simulator and Intel Catalyst builds
 		are not supported.
 	-->
+
+	<!-- The entry points that LibVpxFrameDecoder resolves with dlsym. Keep them in sync with the LibraryImport
+	     declarations under src/LibVpxFrameDecoder/Interop (VpxNative, YuvNative and YuvShimNative). -->
+	<PropertyGroup>
+		<LibVpxFrameDecoderLibVpxLinkerFlags>-Wl,-exported_symbol,_vpx_codec_vp8_dx -Wl,-exported_symbol,_vpx_codec_vp9_dx -Wl,-exported_symbol,_vpx_codec_version -Wl,-exported_symbol,_vpx_codec_version_str -Wl,-exported_symbol,_vpx_codec_dec_init_ver -Wl,-exported_symbol,_vpx_codec_decode -Wl,-exported_symbol,_vpx_codec_get_frame -Wl,-exported_symbol,_vpx_codec_destroy -Wl,-exported_symbol,_vpx_codec_error -Wl,-exported_symbol,_vpx_codec_error_detail</LibVpxFrameDecoderLibVpxLinkerFlags>
+		<LibVpxFrameDecoderLibYuvLinkerFlags>-Wl,-exported_symbol,_I420ToARGBMatrix -Wl,-exported_symbol,_I420AlphaToARGBMatrix</LibVpxFrameDecoderLibYuvLinkerFlags>
+		<LibVpxFrameDecoderShimLinkerFlags>-Wl,-exported_symbol,_lvpx_yuv_constants</LibVpxFrameDecoderShimLinkerFlags>
+	</PropertyGroup>
 
 	<ItemGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64' or '$(ComputedPlatform)' == 'iPhone' or ('$(_PlatformName)' == 'iOS' and '$(SdkIsDevice)' == 'true')">
 		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-device\libvpx.a">
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
+			<LinkerFlags>$(LibVpxFrameDecoderLibVpxLinkerFlags)</LinkerFlags>
 		</NativeReference>
 		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-device\libyuv.a">
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
 			<IsCxx>true</IsCxx>
+			<LinkerFlags>$(LibVpxFrameDecoderLibYuvLinkerFlags)</LinkerFlags>
 		</NativeReference>
 		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-device\liblvpxshim.a">
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
+			<LinkerFlags>$(LibVpxFrameDecoderShimLinkerFlags)</LinkerFlags>
 		</NativeReference>
 	</ItemGroup>
 
@@ -36,17 +52,20 @@
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
+			<LinkerFlags>$(LibVpxFrameDecoderLibVpxLinkerFlags)</LinkerFlags>
 		</NativeReference>
 		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-simulator\libyuv.a">
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
 			<IsCxx>true</IsCxx>
+			<LinkerFlags>$(LibVpxFrameDecoderLibYuvLinkerFlags)</LinkerFlags>
 		</NativeReference>
 		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-simulator\liblvpxshim.a">
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
+			<LinkerFlags>$(LibVpxFrameDecoderShimLinkerFlags)</LinkerFlags>
 		</NativeReference>
 	</ItemGroup>
 
@@ -55,17 +74,20 @@
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
+			<LinkerFlags>$(LibVpxFrameDecoderLibVpxLinkerFlags)</LinkerFlags>
 		</NativeReference>
 		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\maccatalyst-arm64\libyuv.a">
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
 			<IsCxx>true</IsCxx>
+			<LinkerFlags>$(LibVpxFrameDecoderLibYuvLinkerFlags)</LinkerFlags>
 		</NativeReference>
 		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\maccatalyst-arm64\liblvpxshim.a">
 			<Kind>Static</Kind>
 			<SmartLink>False</SmartLink>
 			<ForceLoad>true</ForceLoad>
+			<LinkerFlags>$(LibVpxFrameDecoderShimLinkerFlags)</LinkerFlags>
 		</NativeReference>
 	</ItemGroup>
 
