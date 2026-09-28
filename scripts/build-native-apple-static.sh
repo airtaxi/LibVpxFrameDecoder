@@ -40,8 +40,9 @@ fetch_sources() {
 }
 
 # The arm64-darwin-gcc target of libvpx adds the iphoneos sysroot and -miphoneos-version-min on its own, which
-# conflicts with the target triple of the simulator and of Mac Catalyst. This script passes the sysroot and the
-# platform flags per target instead, so the block that adds them is neutralized in the cloned source.
+# conflicts with the target triple of the simulator and of Mac Catalyst. The block that adds them is patched to
+# read the sysroot and the target triple from the environment instead, so the configure checks, the build and
+# the resulting archive all agree on the platform. The patch fails loudly when the upstream block changes.
 patch_libvpx_configure() {
     python3 - "$SOURCE_ROOT/libvpx/build/make/configure.sh" <<'PY'
 import pathlib
@@ -58,13 +59,21 @@ if end == -1:
     raise SystemExit("libvpx configure.sh does not terminate the arm*-darwin case")
 end += len("      ;;\n")
 block = text[start:end]
-if "build script passes the sysroot" in block:
+if "VPX_APPLE_SYSROOT" in block:
     print("the libvpx configure.sh is already patched")
-elif "IOS_VERSION_MIN" in block:
+elif "IOS_VERSION_MIN" in block or "build script passes the sysroot" in block:
     replacement = (
         "    arm*-darwin-*)\n"
-        "      # The build script passes the sysroot, the target triple and the deployment target itself,\n"
-        "      # because the same libvpx target also builds for the simulator and for Mac Catalyst.\n"
+        "      # The build script passes the sysroot and the target triple through the environment, because the\n"
+        "      # same libvpx target also builds for the simulator and for Mac Catalyst.\n"
+        "      if [ -n \"${VPX_APPLE_SYSROOT}\" ]; then\n"
+        "        add_cflags  \"-isysroot ${VPX_APPLE_SYSROOT}\"\n"
+        "        add_ldflags \"-isysroot ${VPX_APPLE_SYSROOT}\"\n"
+        "      fi\n"
+        "      if [ -n \"${VPX_APPLE_TARGET}\" ]; then\n"
+        "        add_cflags  \"-target ${VPX_APPLE_TARGET}\"\n"
+        "        add_ldflags \"-target ${VPX_APPLE_TARGET}\"\n"
+        "      fi\n"
         "      ;;\n"
     )
     path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
@@ -74,34 +83,36 @@ else:
 PY
 }
 
-# build_libvpx <name> <sysroot> <extra flags>
+# build_libvpx <name> <sysroot> <target triple>
 build_libvpx() {
     local name="$1"
     local sysroot="$2"
-    local extra_flags="$3"
+    local target_triple="$3"
     local build_directory="$SOURCE_ROOT/build/libvpx-$name"
     local prefix_directory="$SOURCE_ROOT/install/libvpx-$name"
 
-    info "Building libvpx for $name (sysroot $sysroot)"
+    info "Building libvpx for $name (sysroot $sysroot, target $target_triple)"
     rm -rf "$build_directory"
     mkdir -p "$build_directory" "$OUTPUT_ROOT/$name"
     (
         cd "$build_directory"
-        # The arm64-darwin-gcc target is the iOS target of libvpx, but this script passes the sysroot and the
-        # platform flags itself (the configure.sh block that adds the iphoneos flags is patched out above), so
-        # the same code path builds for the device, the simulator and Mac Catalyst.
-        # libvpx configure has no --extra-ldflags option, so the link flags go through the environment, which
-        # is also how the vcpkg port passes them. The default linker is the bare 'ld', which rejects driver
-        # flags, so the compiler driver is used for the configure link checks.
+        # The patched configure.sh reads the sysroot and the target triple from the environment and adds them to
+        # both the compile and the link flags. libvpx configure has no --extra-ldflags option, and its default
+        # linker is the bare 'ld', which rejects driver flags, so the compiler driver runs the configure links.
+        export VPX_APPLE_SYSROOT="$sysroot"
+        export VPX_APPLE_TARGET="$target_triple"
         export LD="$(xcrun --find clang)"
-        export LDFLAGS="-isysroot $sysroot $extra_flags"
-        "$SOURCE_ROOT/libvpx/configure" \
+        if ! "$SOURCE_ROOT/libvpx/configure" \
             --target=arm64-darwin-gcc \
             --disable-shared --enable-static \
             --disable-examples --disable-tools --disable-docs --disable-unit-tests \
             --enable-pic \
-            --prefix="$prefix_directory" \
-            --extra-cflags="-isysroot $sysroot $extra_flags"
+            --prefix="$prefix_directory"
+        then
+            echo "libvpx configure failed for $name; the tail of config.log:" >&2
+            tail -n 40 config.log >&2 || true
+            exit 1
+        fi
         make -j"$PROCESSOR_COUNT"
         make install
     )
@@ -117,35 +128,37 @@ build_libyuv() {
     info "Building libyuv for $name (sysroot $sysroot)"
     rm -rf "$build_directory"
     mkdir -p "$OUTPUT_ROOT/$name"
-    # CMAKE_SYSTEM_NAME=iOS plus the iphonesimulator sysroot produces an arm64 simulator library, and the
-    # macOS sysroot plus CMAKE_OSX_DEPLOYMENT_TARGET produces a Mac Catalyst (macabi) library.
+    # CMAKE_SYSTEM_NAME=iOS plus the iphonesimulator sysroot produces an arm64 simulator library, and the macOS
+    # sysroot plus CMAKE_OSX_DEPLOYMENT_TARGET produces a Mac Catalyst (macabi) library. CMAKE_SYSTEM_PROCESSOR
+    # is set explicitly because libyuv selects its aarch64 kernels from it, and only the static 'yuv' target is
+    # built because libyuv always declares the shared target as well and the package only needs the archive.
     cmake -S "$SOURCE_ROOT/libyuv" -B "$build_directory" \
         -DCMAKE_SYSTEM_NAME=iOS \
         -DCMAKE_OSX_SYSROOT="$sysroot" \
         -DCMAKE_OSX_ARCHITECTURES=arm64 \
         -DCMAKE_OSX_DEPLOYMENT_TARGET="$DEPLOYMENT_TARGET" \
+        -DCMAKE_SYSTEM_PROCESSOR=arm64 \
         -DBUILD_SHARED_LIBS=OFF \
         -DCMAKE_BUILD_TYPE=Release \
         -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON
-    cmake --build "$build_directory" --config Release -j "$PROCESSOR_COUNT"
+    cmake --build "$build_directory" --config Release --target yuv -j "$PROCESSOR_COUNT"
     cp "$build_directory/libyuv.a" "$OUTPUT_ROOT/$name/libyuv.a"
 }
 
-# build_shim <name> <sysroot> <extra flags>
+# build_shim <name> <sysroot> <target triple>
 build_shim() {
     local name="$1"
     local sysroot="$2"
-    local extra_flags="$3"
+    local target_triple="$3"
     local object_path="$SOURCE_ROOT/build/lvpx_shim-$name.o"
 
-    info "Building the lvpxshim constants shim for $name"
+    info "Building the lvpxshim constants shim for $name (target $target_triple)"
     mkdir -p "$SOURCE_ROOT/build" "$OUTPUT_ROOT/$name"
     clang -c "$REPOSITORY_ROOT/native/shim/lvpx_shim.c" \
         -o "$object_path" \
         -isysroot "$sysroot" \
-        -arch arm64 \
-        -O2 \
-        $extra_flags
+        -target "$target_triple" \
+        -O2
     ar rcs "$OUTPUT_ROOT/$name/liblvpxshim.a" "$object_path"
 }
 
@@ -154,20 +167,22 @@ case "${1:-}" in
         fetch_sources
         device_sysroot="$(xcrun --sdk iphoneos --show-sdk-path)"
         simulator_sysroot="$(xcrun --sdk iphonesimulator --show-sdk-path)"
-        build_libvpx ios-device "$device_sysroot" "-miphoneos-version-min=$DEPLOYMENT_TARGET"
-        build_libvpx ios-simulator "$simulator_sysroot" "-mios-simulator-version-min=$DEPLOYMENT_TARGET"
+        device_target="arm64-apple-ios$DEPLOYMENT_TARGET"
+        simulator_target="arm64-apple-ios$DEPLOYMENT_TARGET-simulator"
+        build_libvpx ios-device "$device_sysroot" "$device_target"
+        build_libvpx ios-simulator "$simulator_sysroot" "$simulator_target"
         build_libyuv ios-device iphoneos
         build_libyuv ios-simulator iphonesimulator
-        build_shim ios-device "$device_sysroot" "-miphoneos-version-min=$DEPLOYMENT_TARGET"
-        build_shim ios-simulator "$simulator_sysroot" "-mios-simulator-version-min=$DEPLOYMENT_TARGET"
+        build_shim ios-device "$device_sysroot" "$device_target"
+        build_shim ios-simulator "$simulator_sysroot" "$simulator_target"
         ;;
     maccatalyst)
         fetch_sources
         macos_sysroot="$(xcrun --sdk macosx --show-sdk-path)"
-        catalyst_flags="-target arm64-apple-ios$DEPLOYMENT_TARGET-macabi"
-        build_libvpx maccatalyst-arm64 "$macos_sysroot" "$catalyst_flags"
+        catalyst_target="arm64-apple-ios$DEPLOYMENT_TARGET-macabi"
+        build_libvpx maccatalyst-arm64 "$macos_sysroot" "$catalyst_target"
         build_libyuv maccatalyst-arm64 macosx
-        build_shim maccatalyst-arm64 "$macos_sysroot" "$catalyst_flags"
+        build_shim maccatalyst-arm64 "$macos_sysroot" "$catalyst_target"
         ;;
     *)
         printf 'Usage: %s ios|maccatalyst\n' "$0" >&2
