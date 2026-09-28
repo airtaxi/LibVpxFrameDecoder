@@ -7,6 +7,7 @@ on:
     paths:
       - 'native/**'
       - 'ports/**'
+      - 'triplets/**'
       - 'scripts/**'
       - 'src/**'
       - 'tests/**'
@@ -18,6 +19,25 @@ env:
   LIBYUV_COMMIT: d98915a654d3564e4802a0004add46221c4e4348
 
 jobs:
+  windows:
+    name: windows (x64, arm64)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the native libraries
+        shell: pwsh
+        run: ./scripts/build-native-libs.ps1 -VcpkgRoot "${{ runner.temp }}/vcpkg"
+      - name: Upload the x64 libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-win-x64
+          path: native/win-x64/*
+      - name: Upload the arm64 libraries
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-win-arm64
+          path: native/win-arm64/*
+
   linux:
     name: linux (${{ matrix.rid }})
     runs-on: ubuntu-latest
@@ -35,11 +55,11 @@ jobs:
             cxx: aarch64-linux-gnu-g++
     steps:
       - uses: actions/checkout@v4
-      - name: Install the cross compiler
-        if: matrix.rid == 'linux-arm64'
+      - name: Install the build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          sudo apt-get install -y nasm
+          if [ "${{ matrix.rid }}" = "linux-arm64" ]; then sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu; fi
       - name: Build libvpx
         run: |
           git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
@@ -52,7 +72,7 @@ jobs:
           git clone https://chromium.googlesource.com/libyuv/libyuv build/libyuv
           cd build/libyuv
           git checkout "$LIBYUV_COMMIT"
-          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_SYSTEM_PROCESSOR=${{ matrix.rid == 'linux-arm64' && 'aarch64' || 'x86_64' }} -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
           cmake --build cmake-build -j"$(nproc)"
       - name: Stage the native libraries
         run: |
@@ -67,24 +87,22 @@ jobs:
 
   macos:
     name: macos (${{ matrix.rid }})
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - rid: osx-arm64
-            target: arm64-darwin-gcc
-            arch: arm64
+            os: macos-14
           - rid: osx-x64
-            target: x86_64-darwin-gcc
-            arch: x86_64
+            os: macos-13
     steps:
       - uses: actions/checkout@v4
       - name: Build libvpx
         run: |
           git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
           cd build/libvpx
-          ./configure --target=${{ matrix.target }} --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install" --extra-cflags="-arch ${{ matrix.arch }}" --extra-ldflags="-arch ${{ matrix.arch }}"
+          ./configure --target=${{ matrix.rid == 'osx-arm64' && 'arm64-darwin-gcc' || 'x86_64-darwin-gcc' }} --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install"
           make -j"$(sysctl -n hw.ncpu)"
           make install
       - name: Build libyuv
@@ -92,7 +110,7 @@ jobs:
           git clone https://chromium.googlesource.com/libyuv/libyuv build/libyuv
           cd build/libyuv
           git checkout "$LIBYUV_COMMIT"
-          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON
           cmake --build cmake-build -j"$(sysctl -n hw.ncpu)"
       - name: Stage the native libraries
         run: |
@@ -115,11 +133,9 @@ jobs:
       matrix:
         include:
           - rid: android-arm64
-            target: arm64-android-gcc
-            abi: arm64-v8a
+            triplet: arm64-android-dynamic
           - rid: android-x64
-            target: x86_64-android-gcc
-            abi: x86_64
+            triplet: x64-android-dynamic
     steps:
       - uses: actions/checkout@v4
       - name: Locate the Android NDK
@@ -127,27 +143,20 @@ jobs:
           if [ -z "$ANDROID_NDK_LATEST_HOME" ]; then
             ANDROID_NDK_LATEST_HOME="$ANDROID_HOME/ndk/$(ls "$ANDROID_HOME/ndk" | tail -1)"
           fi
-          echo "ANDROID_NDK=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
           ls "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-      - name: Build libvpx
+      - name: Install vcpkg
         run: |
-          git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
-          cd build/libvpx
-          ./configure --target=${{ matrix.target }} --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install" --sdk-path="$ANDROID_NDK" --libc="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
-          make -j"$(nproc)"
-          make install
-      - name: Build libyuv
+          git clone --depth 1 https://github.com/microsoft/vcpkg.git "$RUNNER_TEMP/vcpkg"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Build libvpx and libyuv
         run: |
-          git clone https://chromium.googlesource.com/libyuv/libyuv build/libyuv
-          cd build/libyuv
-          git checkout "$LIBYUV_COMMIT"
-          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24
-          cmake --build cmake-build -j"$(nproc)"
+          "$RUNNER_TEMP/vcpkg/vcpkg" install "libvpx:${{ matrix.triplet }}" "libyuv:${{ matrix.triplet }}" --overlay-ports=ports --overlay-triplets=triplets
       - name: Stage the native libraries
         run: |
           mkdir -p "native/${{ matrix.rid }}"
-          cp -L "$(ls build/libvpx-install/lib/libvpx.so* | head -1)" "native/${{ matrix.rid }}/libvpx.so"
-          cp -L "$(ls build/libyuv/cmake-build/libyuv.so* | head -1)" "native/${{ matrix.rid }}/libyuv.so"
+          cp -L "$RUNNER_TEMP/vcpkg/installed/${{ matrix.triplet }}/lib/libvpx.so" "native/${{ matrix.rid }}/libvpx.so"
+          cp -L "$RUNNER_TEMP/vcpkg/installed/${{ matrix.triplet }}/lib/libyuv.so" "native/${{ matrix.rid }}/libyuv.so"
           ls -l "native/${{ matrix.rid }}"
       - uses: actions/upload-artifact@v4
         with:
@@ -156,7 +165,7 @@ jobs:
 
   verify:
     name: verify (${{ matrix.rid }})
-    needs: [linux, macos]
+    needs: [windows, linux, macos]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -167,11 +176,10 @@ jobs:
           - os: macos-14
             rid: osx-arm64
           - os: windows-latest
-            rid: win-arm64
+            rid: win-x64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        if: matrix.rid != 'win-arm64'
         with:
           name: native-${{ matrix.rid }}
           path: native/${{ matrix.rid }}
@@ -188,11 +196,11 @@ jobs:
           fi
           dotnet run --project tools/FrameDump -- compare tests/assets --ffmpeg ffmpeg
       - name: Check premultiplied alpha
-        run: dotnet run --project tools/FrameDump -- premultiply tests/assets/spark-alpha.webm --frame 15
+        run: dotnet run --project tools/FrameDump -- premultiply tests/assets/alpha-vp9.webm --frame 30
 
   pack:
     name: pack
-    needs: [linux, macos, android]
+    needs: [windows, linux, macos, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -25,7 +25,7 @@ LibVpxFrameDecoder is a WebM (VP8/VP9) frame decoder for .NET. It calls the nati
 
 | Platform | Architectures | Native binaries |
 |---|---|---|
-| Windows | x64, ARM64 | Ship with the repository (MSVC builds through vcpkg) |
+| Windows | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` (MSVC through vcpkg) and shipped with the repository |
 | Linux | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` and packed into the NuGet package |
 | macOS | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` and packed into the NuGet package |
 | Android | ARM64, x64 | Built by `.github/workflows/native-libraries.yml` (shared libraries for jniLibs) |
