@@ -36,6 +36,42 @@ fetch_sources() {
     info "Checking out libyuv $LIBYUV_COMMIT"
     git -C "$SOURCE_ROOT/libyuv" fetch --depth 1 origin "$LIBYUV_COMMIT" || true
     git -C "$SOURCE_ROOT/libyuv" checkout --detach "$LIBYUV_COMMIT"
+    patch_libvpx_configure
+}
+
+# The arm64-darwin-gcc target of libvpx adds the iphoneos sysroot and -miphoneos-version-min on its own, which
+# conflicts with the target triple of the simulator and of Mac Catalyst. This script passes the sysroot and the
+# platform flags per target instead, so the block that adds them is neutralized in the cloned source.
+patch_libvpx_configure() {
+    python3 - "$SOURCE_ROOT/libvpx/build/make/configure.sh" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+marker = "    arm*-darwin-*)\n"
+start = text.find(marker)
+if start == -1:
+    raise SystemExit("libvpx configure.sh does not contain the arm*-darwin case")
+end = text.find("      ;;\n", start)
+if end == -1:
+    raise SystemExit("libvpx configure.sh does not terminate the arm*-darwin case")
+end += len("      ;;\n")
+block = text[start:end]
+if "build script passes the sysroot" in block:
+    print("the libvpx configure.sh is already patched")
+elif "IOS_VERSION_MIN" in block:
+    replacement = (
+        "    arm*-darwin-*)\n"
+        "      # The build script passes the sysroot, the target triple and the deployment target itself,\n"
+        "      # because the same libvpx target also builds for the simulator and for Mac Catalyst.\n"
+        "      ;;\n"
+    )
+    path.write_text(text[:start] + replacement + text[end:], encoding="utf-8")
+    print("patched the libvpx configure.sh")
+else:
+    raise SystemExit(f"unexpected arm*-darwin block in libvpx configure.sh: {block!r}")
+PY
 }
 
 # build_libvpx <name> <sysroot> <extra flags>
@@ -51,11 +87,13 @@ build_libvpx() {
     mkdir -p "$build_directory" "$OUTPUT_ROOT/$name"
     (
         cd "$build_directory"
-        # The arm64-darwin-gcc target is the iOS target of libvpx: it adds -miphoneos-version-min and the
-        # iphoneos sysroot on its own. The extra flags are appended last, so they override the sysroot and the
-        # deployment target for the simulator and for Mac Catalyst.
+        # The arm64-darwin-gcc target is the iOS target of libvpx, but this script passes the sysroot and the
+        # platform flags itself (the configure.sh block that adds the iphoneos flags is patched out above), so
+        # the same code path builds for the device, the simulator and Mac Catalyst.
         # libvpx configure has no --extra-ldflags option, so the link flags go through the environment, which
-        # is also how the vcpkg port passes them.
+        # is also how the vcpkg port passes them. The default linker is the bare 'ld', which rejects driver
+        # flags, so the compiler driver is used for the configure link checks.
+        export LD="$(xcrun --find clang)"
         export LDFLAGS="-isysroot $sysroot $extra_flags"
         "$SOURCE_ROOT/libvpx/configure" \
             --target=arm64-darwin-gcc \
