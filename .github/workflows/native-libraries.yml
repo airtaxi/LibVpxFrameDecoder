@@ -3,8 +3,38 @@ name: native libraries
 on:
   workflow_dispatch:
     inputs:
+      windows:
+        description: Build and verify the Windows (x64, ARM64) native libraries.
+        required: true
+        default: true
+        type: boolean
+      linux:
+        description: Build and verify the Linux (x64, ARM64) native libraries.
+        required: true
+        default: true
+        type: boolean
+      macos:
+        description: Build and verify the macOS (Apple silicon) native libraries.
+        required: true
+        default: true
+        type: boolean
+      android:
+        description: Build and verify the Android (ARM64, x64) native libraries.
+        required: true
+        default: true
+        type: boolean
+      ios:
+        description: Build and verify the iOS (device and simulator) static libraries.
+        required: true
+        default: true
+        type: boolean
+      maccatalyst:
+        description: Build and verify the Mac Catalyst static libraries.
+        required: true
+        default: true
+        type: boolean
       publish:
-        description: Publish the packed NuGet package to NuGet.org.
+        description: Publish the packed NuGet package to NuGet.org. Requires every platform to be enabled.
         required: true
         default: false
         type: boolean
@@ -12,6 +42,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/native-libraries.yml'
+      - 'buildTransitive/**'
       - 'native/**'
       - 'ports/**'
       - 'triplets/**'
@@ -35,6 +66,10 @@ env:
   LIBYUV_COMMIT: d98915a654d3564e4802a0004add46221c4e4348
   PACKAGE_PROJECT: src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj
 
+# Every platform of this workflow can be selected with the check boxes of a manual run, so a quick check only
+# builds the platforms it needs (Windows is the slowest one). A push to main still builds everything, but only
+# when the <Version> of the package project increases. The pack job needs every platform, so an incomplete
+# selection never produces or publishes a partial package.
 jobs:
   resolve-version:
     name: resolve version
@@ -43,6 +78,12 @@ jobs:
       run: ${{ steps.version.outputs.run }}
       publish: ${{ steps.version.outputs.publish }}
       current: ${{ steps.version.outputs.current }}
+      windows: ${{ steps.version.outputs.windows }}
+      linux: ${{ steps.version.outputs.linux }}
+      macos: ${{ steps.version.outputs.macos }}
+      android: ${{ steps.version.outputs.android }}
+      ios: ${{ steps.version.outputs.ios }}
+      maccatalyst: ${{ steps.version.outputs.maccatalyst }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,11 +112,31 @@ jobs:
             return $previousVersion
           }
 
+          function Get-PlatformFlag([string]$value) {
+            if ([string]::IsNullOrWhiteSpace($value)) { return "true" }
+            return $value.ToLowerInvariant()
+          }
+
+          # One flag per platform. A push runs every platform and a manual run follows the check boxes
+          # (an unchecked box arrives as false). The flags are normalized to strings, so the job conditions
+          # never depend on how the runner passes boolean inputs.
+          $platformFlags = [ordered]@{
+            windows     = Get-PlatformFlag "${{ inputs.windows }}"
+            linux       = Get-PlatformFlag "${{ inputs.linux }}"
+            macos       = Get-PlatformFlag "${{ inputs.macos }}"
+            android     = Get-PlatformFlag "${{ inputs.android }}"
+            ios         = Get-PlatformFlag "${{ inputs.ios }}"
+            maccatalyst = Get-PlatformFlag "${{ inputs.maccatalyst }}"
+          }
+          foreach ($platform in $platformFlags.Keys) { "$platform=$($platformFlags[$platform])" >> $env:GITHUB_OUTPUT }
+          Write-Host "Platforms: $(($platformFlags.Keys | ForEach-Object { "$_=$($platformFlags[$_])" }) -join ' ')"
+          Write-Host "The pack job needs every platform flag to be true."
+
           $projectPath = "${{ env.PACKAGE_PROJECT }}"
           $currentVersion = Get-ProjectVersion $projectPath
 
           if ("${{ github.event_name }}" -eq "workflow_dispatch") {
-            $shouldPublish = "${{ inputs.publish }}" -eq "true"
+            $shouldPublish = "${{ inputs.publish }}".ToLowerInvariant() -eq "true"
             "run=true" >> $env:GITHUB_OUTPUT
             "publish=$($shouldPublish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
             "current=$currentVersion" >> $env:GITHUB_OUTPUT
@@ -110,7 +171,7 @@ jobs:
   windows:
     name: windows (x64, arm64)
     needs: resolve-version
-    if: needs.resolve-version.outputs.run == 'true'
+    if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.windows == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -131,7 +192,7 @@ jobs:
   linux:
     name: linux (${{ matrix.rid }})
     needs: resolve-version
-    if: needs.resolve-version.outputs.run == 'true'
+    if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.linux == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -180,7 +241,7 @@ jobs:
   macos:
     name: macos (osx-arm64)
     needs: resolve-version
-    if: needs.resolve-version.outputs.run == 'true'
+    if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.macos == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -221,7 +282,7 @@ jobs:
   android:
     name: android (${{ matrix.rid }})
     needs: resolve-version
-    if: needs.resolve-version.outputs.run == 'true'
+    if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.android == 'true'
     runs-on: ubuntu-latest
     env:
       VCPKG_FORCE_SYSTEM_BINARIES: 1
@@ -264,27 +325,212 @@ jobs:
           name: native-${{ matrix.rid }}
           path: native/${{ matrix.rid }}/*
 
-  verify:
-    name: verify (${{ matrix.rid }})
-    needs: [resolve-version, windows, linux, macos]
+  ios:
+    name: ios (device, simulator)
+    needs: resolve-version
+    if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.ios == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select a full Xcode
+        run: |
+          if ! xcode-select -p | grep -q '^/Applications/Xcode'; then
+            sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          fi
+          xcode-select -p
+          xcodebuild -version
+      - name: Build the static libraries
+        run: bash scripts/build-native-apple-static.sh ios
+      - name: Inspect the static libraries
+        run: |
+          set -euo pipefail
+          for directory in native/apple/ios-device native/apple/ios-simulator; do
+            echo "--- $directory"
+            ls -l "$directory"
+            nm -gU "$directory/libvpx.a" | grep ' _vpx_codec_decode$'
+            nm -gU "$directory/libyuv.a" | grep ' _I420AlphaToARGBMatrix$'
+            nm -gU "$directory/libyuv.a" | grep ' _kYuvI601Constants$'
+            nm -gU "$directory/liblvpxshim.a" | grep ' _lvpx_yuv_constants$'
+          done
+      - name: Check the build platforms
+        run: |
+          set -euo pipefail
+
+          check_platform() {
+            local archive="$1"
+            local expected="$2"
+            local work
+            local platforms
+            work="$(mktemp -d)"
+            (cd "$work" && ar -x "$GITHUB_WORKSPACE/$archive")
+            platforms="$(otool -l "$work"/*.o | awk '/LC_BUILD_VERSION/{found=1; next} found && /platform/{print $2; found=0}' | sort -u | tr -d ' ' | sed -e 's/^2$/IOS/' -e 's/^6$/MACCATALYST/' -e 's/^7$/IOSSIMULATOR/')"
+            rm -rf "$work"
+            if [ "$platforms" != "$expected" ]; then
+              echo "$archive: expected the platform $expected but found: $platforms" >&2
+              return 1
+            fi
+            echo "$archive: platform $expected"
+          }
+
+          check_platform native/apple/ios-device/libvpx.a IOS
+          check_platform native/apple/ios-simulator/libvpx.a IOSSIMULATOR
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install the iOS workload
+        run: dotnet workload install ios
+      - name: Build the probe app
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve-version.outputs.current }}"
+          dotnet pack "$PACKAGE_PROJECT" -c Release -o artifacts/packages -p:Version="$version"
+          cat > tests/probes/ios/NuGet.config <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="../../../artifacts/packages" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet build tests/probes/ios/IosProbe.csproj -c Debug -f net10.0-ios \
+            -p:RuntimeIdentifier=iossimulator-arm64 \
+            -p:LibVpxFrameDecoderProbeVersion="$version" \
+            -p:EnableCodeSigning=false
+      - name: Check the linked app binary
+        run: |
+          set -euo pipefail
+          binary="$(find tests/probes/ios/bin -type f -name IosProbe -path '*.app/*' | head -1)"
+          echo "binary: $binary"
+          nm -g "$binary" | grep ' _vpx_codec_decode$'
+          nm -g "$binary" | grep ' _I420AlphaToARGBMatrix$'
+          nm -g "$binary" | grep ' _lvpx_yuv_constants$'
+          nm -g "$binary" | grep ' _kYuvI601Constants$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-apple-ios
+          path: native/apple/**
+
+  maccatalyst:
+    name: maccatalyst (arm64)
+    needs: resolve-version
+    if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.maccatalyst == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Select a full Xcode
+        run: |
+          if ! xcode-select -p | grep -q '^/Applications/Xcode'; then
+            sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)"
+          fi
+          xcode-select -p
+          xcodebuild -version
+      - name: Build the static libraries
+        run: bash scripts/build-native-apple-static.sh maccatalyst
+      - name: Inspect the static libraries
+        run: |
+          set -euo pipefail
+          directory=native/apple/maccatalyst-arm64
+          echo "--- $directory"
+          ls -l "$directory"
+          nm -gU "$directory/libvpx.a" | grep ' _vpx_codec_decode$'
+          nm -gU "$directory/libyuv.a" | grep ' _I420AlphaToARGBMatrix$'
+          nm -gU "$directory/libyuv.a" | grep ' _kYuvI601Constants$'
+          nm -gU "$directory/liblvpxshim.a" | grep ' _lvpx_yuv_constants$'
+      - name: Check the build platforms
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          (cd "$work" && ar -x "$GITHUB_WORKSPACE/native/apple/maccatalyst-arm64/libyuv.a")
+          platforms="$(otool -l "$work"/*.o | awk '/LC_BUILD_VERSION/{found=1; next} found && /platform/{print $2; found=0}' | sort -u | tr -d ' ' | sed -e 's/^2$/IOS/' -e 's/^6$/MACCATALYST/' -e 's/^7$/IOSSIMULATOR/')"
+          rm -rf "$work"
+          if [ "$platforms" != "MACCATALYST" ]; then
+            echo "expected the platform MACCATALYST but found: $platforms" >&2
+            exit 1
+          fi
+          echo "libyuv.a: platform MACCATALYST"
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install the Mac Catalyst workload
+        run: dotnet workload install maccatalyst
+      - name: Build the probe app
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve-version.outputs.current }}"
+          dotnet pack "$PACKAGE_PROJECT" -c Release -o artifacts/packages -p:Version="$version"
+          cat > tests/probes/maccatalyst/NuGet.config <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="../../../artifacts/packages" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet build tests/probes/maccatalyst/MacCatalystProbe.csproj -c Debug -f net10.0-maccatalyst \
+            -p:RuntimeIdentifier=maccatalyst-arm64 \
+            -p:LibVpxFrameDecoderProbeVersion="$version" \
+            -p:EnableCodeSigning=false
+      - name: Check the linked app binary
+        run: |
+          set -euo pipefail
+          binary="$(find tests/probes/maccatalyst/bin -type f -name MacCatalystProbe -path '*.app/*' | head -1)"
+          echo "binary: $binary"
+          nm -g "$binary" | grep ' _vpx_codec_decode$'
+          nm -g "$binary" | grep ' _I420AlphaToARGBMatrix$'
+          nm -g "$binary" | grep ' _lvpx_yuv_constants$'
+          nm -g "$binary" | grep ' _kYuvI601Constants$'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-apple-maccatalyst
+          path: native/apple/**
+
+  verify-windows:
+    name: verify (win-x64)
+    needs: [resolve-version, windows]
     if: needs.resolve-version.outputs.run == 'true'
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-latest
-            rid: linux-x64
-          - os: macos-latest
-            rid: osx-arm64
-          - os: windows-latest
-            rid: win-x64
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: native-${{ matrix.rid }}
-          path: native/${{ matrix.rid }}
+          name: native-win-x64
+          path: native/win-x64
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Build
+        run: dotnet build LibVpxFrameDecoder.slnx
+      - name: List the native libraries
+        shell: bash
+        run: |
+          echo "--- native ---"
+          find native -type f | sort
+          echo "--- output ---"
+          find tools/FrameDump/bin -path '*runtimes*' -type f | sort
+      - name: Inspect the native libraries
+        shell: bash
+        run: dotnet run --project tools/FrameDump -- native
+      - name: Compare frames against ffmpeg
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null; then choco install ffmpeg -y --no-progress; fi
+          dotnet run --project tools/FrameDump -- compare tests/assets --ffmpeg ffmpeg
+      - name: Check premultiplied alpha
+        run: dotnet run --project tools/FrameDump -- premultiply tests/assets/alpha-vp9.webm --frame 30
+
+  verify-linux:
+    name: verify (linux-x64)
+    needs: [resolve-version, linux]
+    if: needs.resolve-version.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-linux-x64
+          path: native/linux-x64
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
@@ -301,25 +547,149 @@ jobs:
         shell: bash
         run: |
           dotnet run --project tools/FrameDump -- native
-          if [ "$RUNNER_OS" = "Linux" ]; then ldd native/linux-x64/libyuv.so || true; file native/linux-x64/libyuv.so || true; fi
-          if [ "$RUNNER_OS" = "macOS" ]; then codesign -dv native/osx-arm64/libvpx.dylib 2>&1 | head -5 || true; fi
+          ldd native/linux-x64/libyuv.so || true
+          file native/linux-x64/libyuv.so || true
       - name: Compare frames against ffmpeg
         shell: bash
         run: |
-          if ! command -v ffmpeg >/dev/null; then
-            case "$RUNNER_OS" in
-              Windows) choco install ffmpeg -y --no-progress ;;
-              macOS) brew install ffmpeg ;;
-              *) sudo apt-get install -y ffmpeg ;;
-            esac
-          fi
+          if ! command -v ffmpeg >/dev/null; then sudo apt-get install -y ffmpeg; fi
           dotnet run --project tools/FrameDump -- compare tests/assets --ffmpeg ffmpeg
       - name: Check premultiplied alpha
         run: dotnet run --project tools/FrameDump -- premultiply tests/assets/alpha-vp9.webm --frame 30
 
+  verify-macos:
+    name: verify (osx-arm64)
+    needs: [resolve-version, macos]
+    if: needs.resolve-version.outputs.run == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-osx-arm64
+          path: native/osx-arm64
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Build
+        run: dotnet build LibVpxFrameDecoder.slnx
+      - name: List the native libraries
+        shell: bash
+        run: |
+          echo "--- native ---"
+          find native -type f | sort
+          echo "--- output ---"
+          find tools/FrameDump/bin -path '*runtimes*' -type f | sort
+      - name: Inspect the native libraries
+        shell: bash
+        run: |
+          dotnet run --project tools/FrameDump -- native
+          codesign -dv native/osx-arm64/libvpx.dylib 2>&1 | head -5 || true
+      - name: Compare frames against ffmpeg
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null; then brew install ffmpeg; fi
+          dotnet run --project tools/FrameDump -- compare tests/assets --ffmpeg ffmpeg
+      - name: Check premultiplied alpha
+        run: dotnet run --project tools/FrameDump -- premultiply tests/assets/alpha-vp9.webm --frame 30
+
+  verify-android:
+    name: verify (android)
+    needs: [resolve-version, android]
+    if: needs.resolve-version.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-android-arm64
+          path: native/android-arm64
+      - uses: actions/download-artifact@v4
+        with:
+          name: native-android-x64
+          path: native/android-x64
+      - name: Install the inspection tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y binutils
+      - name: Check the shared libraries
+        run: |
+          set -euo pipefail
+
+          check_library() {
+            local file="$1"
+            local expected_machine="$2"
+            echo "--- $file"
+            readelf -h "$file" | grep -E 'Class|Machine'
+            # 1. The architecture has to match the runtime identifier of the artifact.
+            readelf -h "$file" | grep -q "$expected_machine"
+            # 2. The C++ runtime has to be linked statically, so the app does not need libc++_shared.so.
+            if readelf -d "$file" | grep -q 'libc++_shared'; then
+              echo "$file still depends on libc++_shared.so" >&2
+              exit 1
+            fi
+            readelf -d "$file" | grep NEEDED
+            # 3. Every LOAD segment has to be aligned for the 16 KB pages of newer Android devices.
+            local alignment
+            for alignment in $(readelf -l "$file" | awk '/LOAD/{print $NF}' | sort -u); do
+              if [ "$((alignment))" -lt 16384 ]; then
+                echo "$file: LOAD alignment $alignment is below 16 KB" >&2
+                exit 1
+              fi
+            done
+          }
+
+          check_library native/android-arm64/libvpx.so AArch64
+          check_library native/android-arm64/libyuv.so AArch64
+          check_library native/android-x64/libvpx.so X86-64
+          check_library native/android-x64/libyuv.so X86-64
+
+          # 4. The functions and data symbols the managed decoder resolves at run time have to be exported.
+          nm -D native/android-arm64/libvpx.so | grep 'vpx_codec_decode$'
+          nm -D native/android-arm64/libyuv.so | grep 'I420AlphaToARGBMatrix$'
+          nm -D native/android-arm64/libyuv.so | grep 'kYuvI601Constants$'
+          nm -D native/android-x64/libvpx.so | grep 'vpx_codec_decode$'
+          nm -D native/android-x64/libyuv.so | grep 'I420AlphaToARGBMatrix$'
+          nm -D native/android-x64/libyuv.so | grep 'kYuvI601Constants$'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Install the Android workload
+        run: dotnet workload install android
+      - name: Build the probe app
+        run: |
+          set -euo pipefail
+          version="${{ needs.resolve-version.outputs.current }}"
+          dotnet pack "$PACKAGE_PROJECT" -c Release -o artifacts/packages -p:Version="$version"
+          cat > tests/probes/android/NuGet.config <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <configuration>
+            <packageSources>
+              <clear />
+              <add key="local" value="../../../artifacts/packages" />
+            </packageSources>
+          </configuration>
+          EOF
+          dotnet publish tests/probes/android/AndroidProbe.csproj -c Debug -f net10.0-android \
+            -p:LibVpxFrameDecoderProbeVersion="$version"
+      - name: Check the APK contents
+        run: |
+          set -euo pipefail
+          apk="$(find tests/probes/android/bin -name '*.apk' | sort | head -1)"
+          echo "APK: $apk"
+          unzip -l "$apk" | grep -E 'lib/(arm64-v8a|x86_64)/' || true
+          for abi in arm64-v8a x86_64; do
+            for library in libvpx.so libyuv.so; do
+              if ! unzip -l "$apk" | grep -q "lib/$abi/$library"; then
+                echo "lib/$abi/$library is missing from the APK" >&2
+                exit 1
+              fi
+            done
+          done
+
   pack:
     name: pack
-    needs: [resolve-version, verify, android]
+    needs: [resolve-version, verify-windows, verify-linux, verify-macos, verify-android, ios, maccatalyst]
     if: needs.resolve-version.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -329,10 +699,17 @@ jobs:
           path: artifacts
       - name: Merge the native libraries
         run: |
-          for directory in artifacts/native-*; do
-            rid="${directory#artifacts/native-}"
-            mkdir -p "native/$rid"
-            cp -R "$directory"/. "native/$rid"/
+          set -euo pipefail
+          mkdir -p native
+          for artifact in artifacts/*; do
+            name="${artifact#artifacts/}"
+            case "$name" in
+              native-apple-ios|native-apple-maccatalyst) destination="native/apple" ;;
+              native-*) destination="native/${name#native-}" ;;
+              *) continue ;;
+            esac
+            mkdir -p "$destination"
+            cp -R "$artifact"/. "$destination"/
           done
           find native -type f | sort
       - uses: actions/setup-dotnet@v4

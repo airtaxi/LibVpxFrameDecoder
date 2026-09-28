@@ -18,22 +18,25 @@ LibVpxFrameDecoder is a WebM (VP8/VP9) frame decoder for .NET. It calls the nati
 ## Requirements
 
 - .NET 10 SDK.
-- Native `vpx` and `libyuv` binaries. The repository ships the Windows x64 and Windows ARM64 builds that the script in this repository produces.
-- To rebuild the native binaries: Visual Studio with the C++ toolchain, Git, and network access (the build script fetches vcpkg).
+- Native `vpx` and `libyuv` binaries. The NuGet package carries the binaries of every platform, and the build scripts of this repository produce the Windows and Apple builds for local development and for the workflow.
+- To build the native binaries: Visual Studio with the C++ toolchain, Git, and network access on Windows (the build script fetches vcpkg), or Xcode on macOS.
 
 ### Platform support
 
 | Platform | Architectures | Native binaries |
 |---|---|---|
-| Windows | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` (MSVC through vcpkg) and shipped with the repository |
+| Windows | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` (MSVC through vcpkg) and packed into the NuGet package |
 | Linux | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` and packed into the NuGet package |
 | macOS (Apple silicon) | ARM64 | Built by `.github/workflows/native-libraries.yml` and packed into the NuGet package |
-| Android | ARM64, x64 | Built by `.github/workflows/native-libraries.yml` (shared libraries for jniLibs) |
-| iOS, Mac Catalyst | ARM64 | Not automated yet. iOS needs static linking, see below |
+| Android | ARM64, x64 | Built by `.github/workflows/native-libraries.yml` as shared libraries with a statically linked libc++ and packed into the NuGet package |
+| iOS | ARM64 (device and Apple silicon simulator) | Built by `.github/workflows/native-libraries.yml` as static libraries and packed into the NuGet package |
+| Mac Catalyst | ARM64 | Built by `.github/workflows/native-libraries.yml` as static libraries and packed into the NuGet package |
 
 The assembly resolves `vpx` and `libyuv` from `runtimes/<rid>/native/`, where `<rid>` is the runtime identifier of the running process (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-arm64`, `android-arm64`, `android-x64`). Add a native library pair to a `native/<rid>/` folder in the repository and the build copies it, or extend the workflow with the platform. Intel macOS is out of scope.
 
-iOS does not allow shipping dylibs, so libvpx and libyuv have to be linked statically into the app. The resolver then falls back to the main program handle. libyuv exports its color matrices as data symbols, which dlsym may not find in a statically linked binary, so a small C shim that returns those constants is the planned follow-up for iOS and Mac Catalyst.
+The Android shared libraries do not depend on `libc++_shared.so` (the C++ runtime is linked into them statically), and their LOAD segments are aligned for the 16 KB pages of newer devices.
+
+Apple platforms do not allow shipping dylibs, so iOS and Mac Catalyst link libvpx, libyuv and a small C shim straight into the app. The package carries the static libraries under `static/` and `buildTransitive/LibVpxFrameDecoder.targets` adds them as `NativeReference` items with `ForceLoad`, so every object file is kept and the runtime resolver (which falls back to the main program handle on Apple platforms) finds the symbols. libyuv exports its color matrices as data symbols, which a static link cannot resolve with dlsym, so the shim in `native/shim/lvpx_shim.c` returns those constants through a function. Only arm64 slices are shipped (iOS device, the Apple silicon simulator and Mac Catalyst); the Intel simulator and Intel Catalyst are not supported. The static libraries target iOS 15.0 and Mac Catalyst 15.0.
 
 The Windows native build script is Windows only (Visual Studio, vcpkg, PowerShell). Other platforms build through the workflow; the same steps can be run by hand with a `git clone` of libvpx and libyuv plus `./configure --enable-shared` and CMake.
 
@@ -46,17 +49,20 @@ src/LibVpxFrameDecoder/      managed library (net10.0, unsafe, AOT compatible)
   Webm/                      EBML/WebM demuxer with alpha pairing and cluster seeking
   Decoding/                  VP8/VP9 decoding (main + alpha) and I420 to RGBA/BGRA conversion
 tools/FrameDump/             verification console tool
-native/win-x64/              native libvpx and libyuv (x64)
-native/win-arm64/            native libvpx and libyuv (ARM64)
+tests/probes/                small apps that verify the NuGet package on Android, iOS and Mac Catalyst
+native/shim/lvpx_shim.c      C shim that exposes the libyuv YuvConstants for static links
 native/libvpx-LICENSE.txt    libvpx license text
 native/libvpx-PATENTS.txt    WebM patent grant
 native/libyuv-LICENSE.txt    libyuv license text
 native/libyuv-PATENTS.txt    libyuv patent grant
-native/version.txt           native build provenance
+buildTransitive/             targets that link the static Apple libraries into an app
 ports/libvpx/                vcpkg overlay port that builds shared libvpx (vpx.dll) on MSVC
 ports/libyuv/                vcpkg overlay port that builds shared libyuv (libyuv.dll) without the JPEG helpers
 scripts/build-native-libs.ps1
+scripts/build-native-apple-static.sh
 ```
+
+The built libraries under `native/<rid>/` (and `native/version.txt`) are not committed. `.github/workflows/native-libraries.yml` builds them for every platform and packs them into the NuGet package, and the build scripts write them into the repository for local development.
 
 ## Build
 
@@ -92,9 +98,20 @@ dotnet build LibVpxFrameDecoder.slnx -p:Platform=ARM64
 
 The library project copies every `native\<rid>\` folder of the repository into `runtimes\<rid>\native\` under the output folder. A resolver in the assembly loads the folder that matches the runtime identifier of the running process, so one build works natively and under x64 emulation. The files also flow into the output of any application that references the project.
 
-`dotnet pack src\LibVpxFrameDecoder\LibVpxFrameDecoder.csproj` produces a NuGet package where every `native\<rid>\` folder becomes a `runtimes\<rid>\native\` asset, together with the license file.
+`dotnet pack src\LibVpxFrameDecoder\LibVpxFrameDecoder.csproj` produces a NuGet package where every `native\<rid>\` folder becomes a `runtimes\<rid>\native\` asset and every `native\apple\<folder>\` folder becomes a `static\<folder>\` asset next to `buildTransitive\LibVpxFrameDecoder.targets`, together with the license and patent texts.
 
-`.github/workflows/native-libraries.yml` builds the native libraries for every platform and publishes the NuGet package. It only runs when the `<Version>` of `src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj` increases on a push to `main`, and it can also be started manually with an optional publish flag.
+### 3. Apple static libraries (macOS)
+
+```bash
+bash scripts/build-native-apple-static.sh ios
+bash scripts/build-native-apple-static.sh maccatalyst
+```
+
+The script builds libvpx, libyuv and the `lvpxshim` helper for iOS (device and simulator) and for Mac Catalyst into `native/apple/`. It needs Xcode (`xcode-select` must point at a full Xcode) and clones the pinned libvpx and libyuv sources into `build/apple/`. libvpx uses its `arm64-darwin-gcc` target with an overridden sysroot and deployment target, libyuv uses `CMAKE_SYSTEM_NAME=iOS` with the iphonesimulator or macOS sysroot, and Mac Catalyst adds `-target arm64-apple-ios15.0-macabi`.
+
+`.github/workflows/native-libraries.yml` builds the native libraries for every platform, verifies them, and publishes the NuGet package. A push to `main` only runs it when the `<Version>` of `src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj` increases. A manual run has one check box per platform (`windows`, `linux`, `macos`, `android`, `ios`, `maccatalyst`) and starts with all of them enabled, so a quick check can clear the platforms it does not need (Windows is the slowest one). The `pack` job needs every platform, so a partial selection never produces a partial package, and `publish` only takes effect when every check box is enabled.
+
+The workflow also builds the small apps under `tests/probes/` to verify the NuGet package end to end: the Android APK has to contain `lib/arm64-v8a/libvpx.so` and `lib/x86_64/libvpx.so`, and the iOS and Mac Catalyst app binaries have to contain the force loaded symbols (`_vpx_codec_decode`, `_I420AlphaToARGBMatrix`, `_lvpx_yuv_constants`).
 
 ## Usage
 

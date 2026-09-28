@@ -34,25 +34,43 @@
 		<Content Include="@(NativeLibraryFile)" Link="runtimes\%(RecursiveDir)native\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="false" Visible="false" />
 	</ItemGroup>
 
+	<!-- Static libraries for iOS and Mac Catalyst. They are built by scripts/build-native-apple-static.sh and are
+	     linked into an app by buildTransitive/LibVpxFrameDecoder.targets. -->
+	<ItemGroup>
+		<AppleStaticLibraryFile Include="$(NativeLibraryRoot)apple\**\*.a" />
+	</ItemGroup>
+
 	<PropertyGroup>
 		<TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);AddNativeLibrariesToPackage</TargetsForTfmSpecificContentInPackage>
 	</PropertyGroup>
 
 	<!-- NuGet drops files outside the project directory, so the native libraries are staged under obj/ first and
-	     then packed as runtimes/<rid>/native/<file> entries. -->
+	     then packed: the dynamic libraries as runtimes/<rid>/native/<file> entries and the Apple static libraries
+	     as static/<folder>/<file> entries. -->
 	<Target Name="AddNativeLibrariesToPackage">
+		<RemoveDir Directories="$(IntermediateOutputPath)nuget" />
 		<ItemGroup>
-			<NativeLibraryStageFile Include="@(NativeLibraryFile)" StagedPath="$(IntermediateOutputPath)nuget\%(RecursiveDir)native\%(Filename)%(Extension)" />
+			<NativeLibraryStageFile Include="@(NativeLibraryFile)" StagedPath="$(IntermediateOutputPath)nuget\runtimes\%(RecursiveDir)native\%(Filename)%(Extension)" />
+			<AppleStaticLibraryStageFile Include="@(AppleStaticLibraryFile)" StagedPath="$(IntermediateOutputPath)nuget\static\%(RecursiveDir)%(Filename)%(Extension)" />
 		</ItemGroup>
 		<Copy SourceFiles="@(NativeLibraryStageFile)" DestinationFiles="@(NativeLibraryStageFile->'%(StagedPath)')" SkipUnchangedFiles="true" />
+		<Copy SourceFiles="@(AppleStaticLibraryStageFile)" DestinationFiles="@(AppleStaticLibraryStageFile->'%(StagedPath)')" SkipUnchangedFiles="true" Condition="'@(AppleStaticLibraryStageFile)' != ''" />
 		<ItemGroup>
-			<TfmSpecificPackageFile Include="$(IntermediateOutputPath)nuget\**\*.*" PackagePath="runtimes/" Visible="false" />
+			<TfmSpecificPackageFile Include="$(IntermediateOutputPath)nuget\runtimes\**\*.*" PackagePath="runtimes/" Visible="false" />
+			<TfmSpecificPackageFile Include="$(IntermediateOutputPath)nuget\static\**\*.*" PackagePath="static/" Visible="false" />
 		</ItemGroup>
 	</Target>
 
 	<ItemGroup>
 		<None Include="$(MSBuildThisFileDirectory)..\..\LICENSE.txt" Pack="true" PackagePath="" Visible="false" />
 		<None Include="$(MSBuildThisFileDirectory)..\..\README.md" Pack="true" PackagePath="" Visible="false" />
+		<!-- The native binaries ship with their license and patent texts, as the BSD style licenses require. -->
+		<None Include="$(MSBuildThisFileDirectory)..\..\native\libvpx-LICENSE.txt" Pack="true" PackagePath="native/" Visible="false" />
+		<None Include="$(MSBuildThisFileDirectory)..\..\native\libvpx-PATENTS.txt" Pack="true" PackagePath="native/" Visible="false" />
+		<None Include="$(MSBuildThisFileDirectory)..\..\native\libyuv-LICENSE.txt" Pack="true" PackagePath="native/" Visible="false" />
+		<None Include="$(MSBuildThisFileDirectory)..\..\native\libyuv-PATENTS.txt" Pack="true" PackagePath="native/" Visible="false" />
+		<!-- Links the static Apple libraries into the apps that consume the package. -->
+		<None Include="$(MSBuildThisFileDirectory)..\..\buildTransitive\LibVpxFrameDecoder.targets" Pack="true" PackagePath="buildTransitive/" Visible="false" />
 	</ItemGroup>
 
 </Project>

@@ -82,8 +82,8 @@ internal static class NativeLibraryResolver
 			}
 		}
 
-		// iOS links native code into the app binary, so the symbols live in the main program.
-		if (IsIOS()) return NativeLibrary.GetMainProgramHandle();
+		// iOS and Mac Catalyst link native code into the app binary, so the symbols live in the main program.
+		if (IsIOS() || IsMacCatalyst()) return NativeLibrary.GetMainProgramHandle();
 
 		// Fall back to the default resolution (the folder next to the assembly and the system paths).
 		return 0;
@@ -187,7 +187,7 @@ internal static class NativeLibraryResolver
 
 	private static bool IsAndroid() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("ANDROID"));
 
-	private static bool IsIOS() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("IOS"));
+	internal static bool IsIOS() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("IOS"));
 
-	private static bool IsMacCatalyst() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("MACCATALYST"));
+	internal static bool IsMacCatalyst() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("MACCATALYST"));
 }

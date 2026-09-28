@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+
+	<!--
+		Static native libraries for iOS and Mac Catalyst. Apple platforms cannot ship dylibs, so libvpx,
+		libyuv and the small lvpxshim helper are linked straight into the app bundle with NativeReference.
+		ForceLoad keeps every object file, because the managed decoder resolves the functions at run time
+		instead of referencing them at link time. libyuv is C++ and needs the C++ runtime (IsCxx).
+
+		Only arm64 slices are shipped: iOS device (ios-arm64), the Apple silicon simulator
+		(iossimulator-arm64) and Mac Catalyst (maccatalyst-arm64). Intel simulator and Intel Catalyst builds
+		are not supported.
+	-->
+
+	<ItemGroup Condition="'$(RuntimeIdentifier)' == 'ios-arm64' or '$(ComputedPlatform)' == 'iPhone' or ('$(_PlatformName)' == 'iOS' and '$(SdkIsDevice)' == 'true')">
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-device\libvpx.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+		</NativeReference>
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-device\libyuv.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+			<IsCxx>true</IsCxx>
+		</NativeReference>
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-device\liblvpxshim.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+		</NativeReference>
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(RuntimeIdentifier)' == 'iossimulator-arm64' or '$(ComputedPlatform)' == 'iPhoneSimulator' or ('$(_PlatformName)' == 'iOS' and '$(SdkIsSimulator)' == 'true')">
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-simulator\libvpx.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+		</NativeReference>
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-simulator\libyuv.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+			<IsCxx>true</IsCxx>
+		</NativeReference>
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\ios-simulator\liblvpxshim.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+		</NativeReference>
+	</ItemGroup>
+
+	<ItemGroup Condition="'$(_PlatformName)' == 'MacCatalyst' or '$(RuntimeIdentifier)' == 'maccatalyst-arm64'">
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\maccatalyst-arm64\libvpx.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+		</NativeReference>
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\maccatalyst-arm64\libyuv.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+			<IsCxx>true</IsCxx>
+		</NativeReference>
+		<NativeReference Include="$(MSBuildThisFileDirectory)..\static\maccatalyst-arm64\liblvpxshim.a">
+			<Kind>Static</Kind>
+			<SmartLink>False</SmartLink>
+			<ForceLoad>true</ForceLoad>
+		</NativeReference>
+	</ItemGroup>
+
+</Project>

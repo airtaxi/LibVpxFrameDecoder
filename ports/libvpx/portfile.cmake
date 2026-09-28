@@ -236,6 +236,26 @@ else()
         endif()
     elseif(VCPKG_TARGET_IS_ANDROID)
         set(LIBVPX_TARGET "generic-gnu")
+        # Overlay port change: derive the clang target from VCPKG_TARGET_ARCHITECTURE instead of
+        # VCPKG_DETECTED_CMAKE_C_COMPILER_TARGET. The Android NDK toolchain defaults to armeabi-v7a when the
+        # triplet does not set ANDROID_ABI, so the detected target can describe 32 bit ARM while the triplet
+        # asked for a 64 bit architecture. The shared library would then silently be a 32 bit ARM binary.
+        # The target triple carries the API level of the triplet; 24 is the value of both Android triplets.
+        set(LIBVPX_ANDROID_API_LEVEL 24)
+        if(DEFINED VCPKG_CMAKE_SYSTEM_VERSION)
+            set(LIBVPX_ANDROID_API_LEVEL ${VCPKG_CMAKE_SYSTEM_VERSION})
+        endif()
+        if(VCPKG_TARGET_ARCHITECTURE STREQUAL x86)
+            set(LIBVPX_ANDROID_TRIPLE "i686-linux-android${LIBVPX_ANDROID_API_LEVEL}")
+        elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL x64)
+            set(LIBVPX_ANDROID_TRIPLE "x86_64-linux-android${LIBVPX_ANDROID_API_LEVEL}")
+        elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL arm)
+            set(LIBVPX_ANDROID_TRIPLE "armv7a-linux-androideabi${LIBVPX_ANDROID_API_LEVEL}")
+        elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL arm64)
+            set(LIBVPX_ANDROID_TRIPLE "aarch64-linux-android${LIBVPX_ANDROID_API_LEVEL}")
+        else()
+            message(FATAL_ERROR "libvpx: unsupported Android architecture ${VCPKG_TARGET_ARCHITECTURE}")
+        endif()
         # Settings
         if(VCPKG_TARGET_ARCHITECTURE STREQUAL x86)
             list(APPEND OPTIONS --disable-sse4_1 --disable-avx --disable-avx2 --disable-avx512)
@@ -248,9 +268,11 @@ else()
         endif()
         # Set environment variables for configure
         set(ENV{AS} ${VCPKG_DETECTED_CMAKE_C_COMPILER})
-        set(ENV{LDFLAGS} "${LDFLAGS} --target=${VCPKG_DETECTED_CMAKE_C_COMPILER_TARGET}")
+        # Overlay port change: link the C++ runtime statically so the shared library does not require
+        # libc++_shared.so, and align the shared library for the 16 KB page size of newer Android devices.
+        set(ENV{LDFLAGS} "${LDFLAGS} --target=${LIBVPX_ANDROID_TRIPLE} -static-libstdc++ -Wl,-z,max-page-size=16384")
         # Set clang target
-        list(APPEND OPTIONS --extra-cflags=--target=${VCPKG_DETECTED_CMAKE_C_COMPILER_TARGET} --extra-cxxflags=--target=${VCPKG_DETECTED_CMAKE_CXX_COMPILER_TARGET})
+        list(APPEND OPTIONS --extra-cflags=--target=${LIBVPX_ANDROID_TRIPLE} --extra-cxxflags=--target=${LIBVPX_ANDROID_TRIPLE})
         # Unset nasm and let AS do its job
         unset(AS_NASM)
     elseif(VCPKG_TARGET_IS_OSX)

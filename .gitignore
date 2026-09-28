@@ -480,3 +480,17 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# Local native build workspaces. The workflow builds the native libraries and packs them from its artifacts, so
+# only the license texts, the shim source and the build scripts are tracked under native/. The build scripts
+# write their output into these folders.
+/build/
+/native/android-arm64/
+/native/android-x64/
+/native/apple/
+/native/linux-arm64/
+/native/linux-x64/
+/native/osx-arm64/
+/native/version.txt
+/native/win-arm64/
+/native/win-x64/

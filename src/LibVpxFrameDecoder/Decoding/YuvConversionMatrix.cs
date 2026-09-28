@@ -30,6 +30,8 @@ internal static class YuvConversionMatrix
 	/// <summary>Loads the four BT.601/BT.709 and studio/full range matrices followed by their mirrored copies.</summary>
 	private static nint[] LoadMatrixPointers()
 	{
+		if (NativeLibraryResolver.IsIOS() || NativeLibraryResolver.IsMacCatalyst()) return LoadMatrixPointersFromShim();
+
 		var library = YuvNative.LoadLibrary();
 		return
 		[
@@ -43,4 +45,20 @@ internal static class YuvConversionMatrix
 			YuvNative.GetExport(library, "kYvuF709Constants"),
 		];
 	}
+
+	/// <summary>
+	/// Reads the constants through the lvpxshim function on iOS and Mac Catalyst, where a static link cannot
+	/// resolve the data symbols of libyuv with dlsym.
+	/// </summary>
+	private static nint[] LoadMatrixPointersFromShim() =>
+	[
+		YuvShimNative.GetConstantPointer(0),
+		YuvShimNative.GetConstantPointer(1),
+		YuvShimNative.GetConstantPointer(2),
+		YuvShimNative.GetConstantPointer(3),
+		YuvShimNative.GetConstantPointer(4),
+		YuvShimNative.GetConstantPointer(5),
+		YuvShimNative.GetConstantPointer(6),
+		YuvShimNative.GetConstantPointer(7),
+	];
 }
