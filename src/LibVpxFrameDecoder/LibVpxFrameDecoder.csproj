@@ -18,6 +18,7 @@
 		<Description>WebM (VP8/VP9) frame decoder for .NET with alpha support, built on libvpx and libyuv.</Description>
 		<PackageTags>webm;vp8;vp9;libvpx;libyuv;video;alpha</PackageTags>
 		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<RepositoryUrl>https://github.com/airtaxi/LibVpxFrameDecoder</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
 	</PropertyGroup>
@@ -51,6 +52,7 @@
 
 	<ItemGroup>
 		<None Include="$(MSBuildThisFileDirectory)..\..\LICENSE.txt" Pack="true" PackagePath="" Visible="false" />
+		<None Include="$(MSBuildThisFileDirectory)..\..\README.md" Pack="true" PackagePath="" Visible="false" />
 	</ItemGroup>
 
 </Project>
