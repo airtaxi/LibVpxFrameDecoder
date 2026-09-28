@@ -94,7 +94,8 @@ jobs:
         run: |
           git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
           cd build/libvpx
-          ./configure --target=arm64-darwin-gcc --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install"
+          export MACOSX_DEPLOYMENT_TARGET=11.0
+          ./configure --target=arm64-darwin-gcc --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install" --extra-cflags="-arch arm64 -isysroot $(xcrun --sdk macosx --show-sdk-path) -mmacosx-version-min=11.0"
           make -j"$(sysctl -n hw.ncpu)"
           make install
       - name: Build libyuv
@@ -111,8 +112,15 @@ jobs:
           cp -L "$(ls build/libyuv/cmake-build/libyuv.dylib* | head -1)" native/osx-arm64/libyuv.dylib
           install_name_tool -id @rpath/libvpx.dylib native/osx-arm64/libvpx.dylib
           install_name_tool -id @rpath/libyuv.dylib native/osx-arm64/libyuv.dylib
+          if command -v vtool >/dev/null; then
+            vtool -set-build-version macos 11.0 11.0 -replace -output native/osx-arm64/libvpx.dylib.fixed native/osx-arm64/libvpx.dylib
+            mv native/osx-arm64/libvpx.dylib.fixed native/osx-arm64/libvpx.dylib
+            vtool -set-build-version macos 11.0 11.0 -replace -output native/osx-arm64/libyuv.dylib.fixed native/osx-arm64/libyuv.dylib
+            mv native/osx-arm64/libyuv.dylib.fixed native/osx-arm64/libyuv.dylib
+          fi
           codesign --force --sign - native/osx-arm64/libvpx.dylib native/osx-arm64/libyuv.dylib
           ls -l native/osx-arm64
+          otool -l native/osx-arm64/libvpx.dylib | grep -A 4 LC_BUILD_VERSION | head -8
       - uses: actions/upload-artifact@v4
         with:
           name: native-osx-arm64

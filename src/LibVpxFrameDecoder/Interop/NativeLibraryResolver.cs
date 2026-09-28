@@ -94,6 +94,11 @@ internal static class NativeLibraryResolver
 		if (libraryName.Contains('.')) return libraryName;
 
 		if (IsWindows()) return libraryName + ".dll";
+
+		// The Windows DLL of libyuv is named libyuv.dll, but the Unix library is libyuv.so, so an existing
+		// "lib" prefix must not be added twice.
+		if (libraryName.StartsWith("lib", StringComparison.OrdinalIgnoreCase)) libraryName = libraryName[3..];
+
 		if (IsApple()) return "lib" + libraryName + ".dylib";
 
 		return "lib" + libraryName + ".so";
