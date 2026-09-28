@@ -14,7 +14,7 @@
 
 	<PropertyGroup>
 		<!-- The workflow passes the version of the package it just packed. The default points at the published package. -->
-		<LibVpxFrameDecoderProbeVersion Condition="'$(LibVpxFrameDecoderProbeVersion)' == ''">1.0.0</LibVpxFrameDecoderProbeVersion>
+		<LibVpxFrameDecoderProbeVersion Condition="'$(LibVpxFrameDecoderProbeVersion)' == ''">1.0.1</LibVpxFrameDecoderProbeVersion>
 	</PropertyGroup>
 
 	<ItemGroup>
