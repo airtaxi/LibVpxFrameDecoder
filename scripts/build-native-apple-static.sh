@@ -54,14 +54,16 @@ build_libvpx() {
         # The arm64-darwin-gcc target is the iOS target of libvpx: it adds -miphoneos-version-min and the
         # iphoneos sysroot on its own. The extra flags are appended last, so they override the sysroot and the
         # deployment target for the simulator and for Mac Catalyst.
+        # libvpx configure has no --extra-ldflags option, so the link flags go through the environment, which
+        # is also how the vcpkg port passes them.
+        export LDFLAGS="-isysroot $sysroot $extra_flags"
         "$SOURCE_ROOT/libvpx/configure" \
             --target=arm64-darwin-gcc \
             --disable-shared --enable-static \
             --disable-examples --disable-tools --disable-docs --disable-unit-tests \
             --enable-pic \
             --prefix="$prefix_directory" \
-            --extra-cflags="-isysroot $sysroot $extra_flags" \
-            --extra-ldflags="-isysroot $sysroot $extra_flags"
+            --extra-cflags="-isysroot $sysroot $extra_flags"
         make -j"$PROCESSOR_COUNT"
         make install
     )

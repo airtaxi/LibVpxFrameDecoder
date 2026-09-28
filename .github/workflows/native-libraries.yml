@@ -363,7 +363,12 @@ jobs:
             local platforms
             work="$(mktemp -d)"
             (cd "$work" && ar -x "$GITHUB_WORKSPACE/$archive")
-            platforms="$(otool -l "$work"/*.o | awk '/LC_BUILD_VERSION/{found=1; next} found && /platform/{print $2; found=0}' | sort -u | tr -d ' ' | sed -e 's/^2$/IOS/' -e 's/^6$/MACCATALYST/' -e 's/^7$/IOSSIMULATOR/')"
+            if ! find "$work" -name '*.o' -print -quit | grep -q .; then
+              echo "$archive: no object files were extracted from the archive" >&2
+              rm -rf "$work"
+              return 1
+            fi
+            platforms="$(find "$work" -name '*.o' -exec otool -l {} + | awk '/LC_BUILD_VERSION/{found=1; next} found && /platform/{print $2; found=0}' | sort -u | tr -d ' ' | sed -e 's/^2$/IOS/' -e 's/^6$/MACCATALYST/' -e 's/^7$/IOSSIMULATOR/')"
             rm -rf "$work"
             if [ "$platforms" != "$expected" ]; then
               echo "$archive: expected the platform $expected but found: $platforms" >&2
@@ -442,7 +447,11 @@ jobs:
           set -euo pipefail
           work="$(mktemp -d)"
           (cd "$work" && ar -x "$GITHUB_WORKSPACE/native/apple/maccatalyst-arm64/libyuv.a")
-          platforms="$(otool -l "$work"/*.o | awk '/LC_BUILD_VERSION/{found=1; next} found && /platform/{print $2; found=0}' | sort -u | tr -d ' ' | sed -e 's/^2$/IOS/' -e 's/^6$/MACCATALYST/' -e 's/^7$/IOSSIMULATOR/')"
+          if ! find "$work" -name '*.o' -print -quit | grep -q .; then
+            echo "no object files were extracted from libyuv.a" >&2
+            exit 1
+          fi
+          platforms="$(find "$work" -name '*.o' -exec otool -l {} + | awk '/LC_BUILD_VERSION/{found=1; next} found && /platform/{print $2; found=0}' | sort -u | tr -d ' ' | sed -e 's/^2$/IOS/' -e 's/^6$/MACCATALYST/' -e 's/^7$/IOSSIMULATOR/')"
           rm -rf "$work"
           if [ "$platforms" != "MACCATALYST" ]; then
             echo "expected the platform MACCATALYST but found: $platforms" >&2
@@ -629,14 +638,29 @@ jobs:
               exit 1
             fi
             readelf -d "$file" | grep NEEDED
-            # 3. Every LOAD segment has to be aligned for the 16 KB pages of newer Android devices.
+            # 3. Every LOAD segment has to be aligned for the 16 KB pages of newer Android devices. The wide
+            # output keeps each program header on one line, so the last column of a LOAD row is its alignment.
             local alignment
-            for alignment in $(readelf -l "$file" | awk '/LOAD/{print $NF}' | sort -u); do
+            local alignments
+            alignments="$(readelf -W -l "$file" | awk '$1 == "LOAD" {print $NF}' | sort -u)"
+            if [ -z "$alignments" ]; then
+              echo "$file: no LOAD segments were found in the program headers" >&2
+              exit 1
+            fi
+            while read -r alignment; do
+              case "$alignment" in
+                0x[0-9a-fA-F]*) ;;
+                *)
+                  echo "$file: could not read the LOAD alignment from 'readelf -W -l': '$alignment'" >&2
+                  exit 1
+                  ;;
+              esac
               if [ "$((alignment))" -lt 16384 ]; then
                 echo "$file: LOAD alignment $alignment is below 16 KB" >&2
                 exit 1
               fi
-            done
+              echo "$file: LOAD alignment $alignment"
+            done <<< "$alignments"
           }
 
           check_library native/android-arm64/libvpx.so AArch64
