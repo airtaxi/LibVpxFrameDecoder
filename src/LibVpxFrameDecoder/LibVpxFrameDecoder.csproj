@@ -10,13 +10,47 @@
 		<LangVersion>latest</LangVersion>
 	</PropertyGroup>
 
-	<!-- Copies both platform specific native libraries into runtimes/win-<arch>/native/ so the resolver in
-	     Interop/NativeLibraryResolver.cs can follow the process architecture (native or x64 emulation). -->
+	<!-- NuGet metadata. The native libraries of every native/<rid> folder are packed as runtimes/<rid>/native assets. -->
+	<PropertyGroup>
+		<PackageId>LibVpxFrameDecoder</PackageId>
+		<Version>1.0.0</Version>
+		<Authors>Howon Lee</Authors>
+		<Description>WebM (VP8/VP9) frame decoder for .NET with alpha support, built on libvpx and libyuv.</Description>
+		<PackageTags>webm;vp8;vp9;libvpx;libyuv;video;alpha</PackageTags>
+		<PackageLicenseFile>LICENSE.txt</PackageLicenseFile>
+		<RepositoryUrl>https://github.com/airtaxi/LibVpxFrameDecoder</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+	</PropertyGroup>
+
+	<PropertyGroup>
+		<NativeLibraryRoot>$(MSBuildThisFileDirectory)..\..\native\</NativeLibraryRoot>
+	</PropertyGroup>
+
+	<!-- Copies every native library that exists under native/<rid>/ into runtimes/<rid>/native/ so the resolver
+	     in Interop/NativeLibraryResolver.cs can follow the runtime identifier of the process. -->
 	<ItemGroup>
-		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-x64\vpx.dll" Link="runtimes\win-x64\native\vpx.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-x64\vpx.dll')" />
-		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-x64\libyuv.dll" Link="runtimes\win-x64\native\libyuv.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-x64\libyuv.dll')" />
-		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-arm64\vpx.dll" Link="runtimes\win-arm64\native\vpx.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-arm64\vpx.dll')" />
-		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-arm64\libyuv.dll" Link="runtimes\win-arm64\native\libyuv.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-arm64\libyuv.dll')" />
+		<NativeLibraryFile Include="$(NativeLibraryRoot)**\vpx.dll;$(NativeLibraryRoot)**\libyuv.dll;$(NativeLibraryRoot)**\libvpx.so;$(NativeLibraryRoot)**\libyuv.so;$(NativeLibraryRoot)**\libvpx.dylib;$(NativeLibraryRoot)**\libyuv.dylib" />
+		<Content Include="@(NativeLibraryFile)" Link="runtimes\%(RecursiveDir)native\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" Pack="false" Visible="false" />
+	</ItemGroup>
+
+	<PropertyGroup>
+		<TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);AddNativeLibrariesToPackage</TargetsForTfmSpecificContentInPackage>
+	</PropertyGroup>
+
+	<!-- NuGet drops files outside the project directory, so the native libraries are staged under obj/ first and
+	     then packed as runtimes/<rid>/native/<file> entries. -->
+	<Target Name="AddNativeLibrariesToPackage">
+		<ItemGroup>
+			<NativeLibraryStageFile Include="@(NativeLibraryFile)" StagedPath="$(IntermediateOutputPath)nuget\%(RecursiveDir)native\%(Filename)%(Extension)" />
+		</ItemGroup>
+		<Copy SourceFiles="@(NativeLibraryStageFile)" DestinationFiles="@(NativeLibraryStageFile->'%(StagedPath)')" SkipUnchangedFiles="true" />
+		<ItemGroup>
+			<TfmSpecificPackageFile Include="$(IntermediateOutputPath)nuget\**\*.*" PackagePath="runtimes/" Visible="false" />
+		</ItemGroup>
+	</Target>
+
+	<ItemGroup>
+		<None Include="$(MSBuildThisFileDirectory)..\..\LICENSE.txt" Pack="true" PackagePath="" Visible="false" />
 	</ItemGroup>
 
 </Project>

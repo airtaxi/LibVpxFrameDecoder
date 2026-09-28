@@ -23,9 +23,19 @@ LibVpxFrameDecoder는 .NET에서 WebM(VP8/VP9) 영상을 디코딩하는 라이�
 
 ### 지원 플랫폼
 
-Windows x64와 Windows ARM64만 지원합니다. 저장소에는 해당 네이티브 바이너리만 들어 있고, 어셈블리에 포함된 리졸버는 `runtimes/win-x64/native/`, `runtimes/win-arm64/native/` 폴더만 탐색합니다. Linux, macOS, 32비트 Windows는 기본 상태로 동작하지 않으며, 네이티브 빌드 스크립트도 Windows 전용(Visual Studio, vcpkg, PowerShell)입니다.
+| 플랫폼 | 아키텍처 | 네이티브 바이너리 |
+|---|---|---|
+| Windows | x64, ARM64 | 저장소에 포함 (MSVC + vcpkg 빌드) |
+| Linux | x64, ARM64 | `.github/workflows/native-libraries.yml`이 빌드해 NuGet 패키지에 포함 |
+| macOS | x64, ARM64 | `.github/workflows/native-libraries.yml`이 빌드해 NuGet 패키지에 포함 |
+| Android | ARM64, x64 | `.github/workflows/native-libraries.yml`이 빌드 (jniLibs용 공유 라이브러리) |
+| iOS, Mac Catalyst | ARM64 | 아직 자동화되지 않음. iOS는 정적 링크 필요(아래 설명) |
 
-관리 코드는 플랫폼 중립적이므로 다른 플랫폼을 추가할 수 있습니다. 대상 플랫폼용 libvpx와 libyuv를 빌드해 어셈블리 옆 `runtimes/<rid>/native/` 폴더에 넣고, `Interop/NativeLibraryResolver.cs`에 해당 폴더 이름을 추가하면 됩니다.
+어셈블리는 실행 프로세스의 런타임 식별자에 해당하는 `runtimes/<rid>/native/`에서 `vpx`와 `libyuv`를 찾습니다(`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `android-arm64`, `android-x64`). 저장소의 `native/<rid>/` 폴더에 네이티브 라이브러리 쌍을 넣으면 빌드가 복사하고, 워크플로에 플랫폼을 추가할 수도 있습니다.
+
+iOS는 dylib 배포가 불가능하므로 libvpx와 libyuv를 앱에 정적으로 링크해야 합니다. 이때 리졸버는 메인 프로그램 핸들로 폴백합니다. libyuv는 색 변환 행렬을 데이터 심볼로 내보내는데, 정적 링크된 바이너리에서는 dlsym이 찾지 못할 수 있어 iOS와 Mac Catalyst용으로 해당 상수를 반환하는 작은 C 심(shim)을 추가하는 것이 다음 계획입니다.
+
+Windows 네이티브 빌드 스크립트는 Windows 전용(Visual Studio, vcpkg, PowerShell)입니다. 다른 플랫폼은 워크플로가 빌드하며, 같은 과정을 수동으로 하려면 libvpx와 libyuv를 `git clone`한 뒤 `./configure --enable-shared`와 CMake로 빌드하면 됩니다.
 
 ## 저장소 구조
 
@@ -80,7 +90,9 @@ dotnet build LibVpxFrameDecoder.slnx -p:Platform=x64
 dotnet build LibVpxFrameDecoder.slnx -p:Platform=ARM64
 ```
 
-라이브러리 프로젝트는 두 아키텍처를 출력 폴더 아래 `runtimes\win-x64\native\`, `runtimes\win-arm64\native\`에 복사합니다. 어셈블리 안의 리졸버가 실행 중인 프로세스에 맞는 폴더를 로드하므로, 하나의 빌드로 네이티브 실행과 x64 에뮬레이션 실행이 모두 됩니다. 이 파일들은 프로젝트를 참조하는 애플리케이션의 출력 폴더에도 함께 복사됩니다.
+라이브러리 프로젝트는 저장소의 모든 `native\<rid>\` 폴더를 출력 폴더 아래 `runtimes\<rid>\native\`로 복사합니다. 어셈블리 안의 리졸버가 실행 프로세스의 런타임 식별자에 맞는 폴더를 로드하므로, 하나의 빌드로 네이티브 실행과 x64 에뮬레이션 실행이 모두 됩니다. 이 파일들은 프로젝트를 참조하는 애플리케이션의 출력 폴더에도 함께 복사됩니다.
+
+`dotnet pack src\LibVpxFrameDecoder\LibVpxFrameDecoder.csproj`로 NuGet 패키지를 만들면 모든 `native\<rid>\` 폴더가 `runtimes\<rid>\native\` 자산으로 들어가고 라이선스 파일도 함께 포함됩니다.
 
 ## 사용법
 
@@ -144,6 +156,8 @@ FrameDump all     <dir|pattern>... [--out dir] [--compare] [--ffmpeg path]
 - `stress`는 파일을 열고 디코딩하고 해제하는 과정을 반복한 뒤 관리 메모리와 프라이빗 바이트 변화량을 보고하고, 파일 핸들이 반환됐는지 확인합니다.
 - `bench`는 워밍업 후 프레임당 밀리초와 초당 프레임 수를 보고합니다.
 - `all`은 디렉터리 전체를 검사하고 PNG 덤프 옆에 `report.txt`를 남깁니다.
+
+`tests/assets/`의 클립은 `python scripts/generate-test-assets.py`로 만든 합성 WebM 3개(알파 있는 VP9, 알파 있는 VP8, 알파 없는 VP9, 각 2초)입니다. 이동하는 알파 패턴과 ffmpeg 테스트 이미지로 만들며, 검증 실행의 입력으로 사용합니다(`FrameDump compare tests/assets --ffmpeg ffmpeg`).
 
 예시:
 

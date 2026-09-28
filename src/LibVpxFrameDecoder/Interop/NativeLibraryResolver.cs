@@ -4,9 +4,9 @@ using System.Runtime.InteropServices;
 namespace LibVpxFrameDecoder.Interop;
 
 /// <summary>
-/// Resolves vpx.dll and libyuv.dll from the runtimes/win-&lt;arch&gt;/native folder of the output directory.
-/// The folder follows the architecture of the running process, so an AnyCPU build works both natively and
-/// under x64 emulation on Windows on ARM.
+/// Resolves vpx.dll, libvpx.so or libvpx.dylib (and the matching libyuv library) from the
+/// runtimes/&lt;rid&gt;/native folder of the output directory. The folder follows the runtime identifier of the
+/// running process, so one build works on every supported platform and architecture.
 /// </summary>
 internal static class NativeLibraryResolver
 {
@@ -56,11 +56,22 @@ internal static class NativeLibraryResolver
 			}
 		}
 
+		// iOS links native code into the app binary, so the symbols live in the main program.
+		if (IsIOS()) return NativeLibrary.GetMainProgramHandle();
+
 		// Fall back to the default resolution (the folder next to the assembly and the system paths).
 		return 0;
 	}
 
-	private static string GetFileName(string libraryName) => libraryName.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? libraryName : libraryName + ".dll";
+	private static string GetFileName(string libraryName)
+	{
+		if (libraryName.Contains('.')) return libraryName;
+
+		if (IsWindows()) return libraryName + ".dll";
+		if (IsApple()) return "lib" + libraryName + ".dylib";
+
+		return "lib" + libraryName + ".so";
+	}
 
 	private static IEnumerable<string> GetCandidates(string fileName)
 	{
@@ -70,12 +81,43 @@ internal static class NativeLibraryResolver
 		yield return Path.Combine(baseDirectory, fileName);
 	}
 
-	private static string GetRuntimeIdentifier() => RuntimeInformation.ProcessArchitecture switch
+	private static string GetRuntimeIdentifier()
 	{
-		Architecture.X64 => "win-x64",
-		Architecture.Arm64 => "win-arm64",
-		Architecture.X86 => "win-x86",
-		Architecture.Arm => "win-arm",
-		_ => "win-" + RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
-	};
+		var runtimeIdentifier = RuntimeInformation.RuntimeIdentifier;
+
+		if (!string.IsNullOrEmpty(runtimeIdentifier)) return runtimeIdentifier;
+
+		var architecture = RuntimeInformation.ProcessArchitecture switch
+		{
+			Architecture.X64 => "x64",
+			Architecture.X86 => "x86",
+			Architecture.Arm64 => "arm64",
+			Architecture.Arm => "arm",
+			_ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
+		};
+
+		return GetPlatformName() + "-" + architecture;
+	}
+
+	private static string GetPlatformName()
+	{
+		if (IsWindows()) return "win";
+		if (IsAndroid()) return "android";
+		if (IsIOS()) return "ios";
+		if (IsMacCatalyst()) return "maccatalyst";
+		if (IsApple()) return "osx";
+		if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return "linux";
+
+		return "unknown";
+	}
+
+	private static bool IsWindows() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+
+	private static bool IsApple() => RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
+	private static bool IsAndroid() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("ANDROID"));
+
+	private static bool IsIOS() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("IOS"));
+
+	private static bool IsMacCatalyst() => RuntimeInformation.IsOSPlatform(OSPlatform.Create("MACCATALYST"));
 }

@@ -1,0 +1,218 @@
+name: native libraries
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'native/**'
+      - 'ports/**'
+      - 'scripts/**'
+      - 'src/**'
+      - 'tests/**'
+      - '.github/workflows/native-libraries.yml'
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  LIBVPX_VERSION: v1.16.0
+  LIBYUV_COMMIT: d98915a654d3564e4802a0004add46221c4e4348
+
+jobs:
+  linux:
+    name: linux (${{ matrix.rid }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: linux-x64
+            target: x86_64-linux-gcc
+            cc: gcc
+            cxx: g++
+          - rid: linux-arm64
+            target: arm64-linux-gcc
+            cc: aarch64-linux-gnu-gcc
+            cxx: aarch64-linux-gnu-g++
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install the cross compiler
+        if: matrix.rid == 'linux-arm64'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+      - name: Build libvpx
+        run: |
+          git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
+          cd build/libvpx
+          ./configure --target=${{ matrix.target }} --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install"
+          make -j"$(nproc)"
+          make install
+      - name: Build libyuv
+        run: |
+          git clone https://chromium.googlesource.com/libyuv/libyuv build/libyuv
+          cd build/libyuv
+          git checkout "$LIBYUV_COMMIT"
+          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
+          cmake --build cmake-build -j"$(nproc)"
+      - name: Stage the native libraries
+        run: |
+          mkdir -p "native/${{ matrix.rid }}"
+          cp -L "$(ls build/libvpx-install/lib/libvpx.so* | head -1)" "native/${{ matrix.rid }}/libvpx.so"
+          cp -L "$(ls build/libyuv/cmake-build/libyuv.so* | head -1)" "native/${{ matrix.rid }}/libyuv.so"
+          ls -l "native/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: native/${{ matrix.rid }}/*
+
+  macos:
+    name: macos (${{ matrix.rid }})
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: osx-arm64
+            target: arm64-darwin-gcc
+            arch: arm64
+          - rid: osx-x64
+            target: x86_64-darwin-gcc
+            arch: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build libvpx
+        run: |
+          git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
+          cd build/libvpx
+          ./configure --target=${{ matrix.target }} --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install" --extra-cflags="-arch ${{ matrix.arch }}" --extra-ldflags="-arch ${{ matrix.arch }}"
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+      - name: Build libyuv
+        run: |
+          git clone https://chromium.googlesource.com/libyuv/libyuv build/libyuv
+          cd build/libyuv
+          git checkout "$LIBYUV_COMMIT"
+          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          cmake --build cmake-build -j"$(sysctl -n hw.ncpu)"
+      - name: Stage the native libraries
+        run: |
+          mkdir -p "native/${{ matrix.rid }}"
+          cp -L "$(ls build/libvpx-install/lib/libvpx.dylib* | head -1)" "native/${{ matrix.rid }}/libvpx.dylib"
+          cp -L "$(ls build/libyuv/cmake-build/libyuv.dylib* | head -1)" "native/${{ matrix.rid }}/libyuv.dylib"
+          install_name_tool -id @rpath/libvpx.dylib "native/${{ matrix.rid }}/libvpx.dylib"
+          install_name_tool -id @rpath/libyuv.dylib "native/${{ matrix.rid }}/libyuv.dylib"
+          ls -l "native/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: native/${{ matrix.rid }}/*
+
+  android:
+    name: android (${{ matrix.rid }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: android-arm64
+            target: arm64-android-gcc
+            abi: arm64-v8a
+          - rid: android-x64
+            target: x86_64-android-gcc
+            abi: x86_64
+    steps:
+      - uses: actions/checkout@v4
+      - name: Locate the Android NDK
+        run: |
+          if [ -z "$ANDROID_NDK_LATEST_HOME" ]; then
+            ANDROID_NDK_LATEST_HOME="$ANDROID_HOME/ndk/$(ls "$ANDROID_HOME/ndk" | tail -1)"
+          fi
+          echo "ANDROID_NDK=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+          ls "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+      - name: Build libvpx
+        run: |
+          git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
+          cd build/libvpx
+          ./configure --target=${{ matrix.target }} --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install" --sdk-path="$ANDROID_NDK" --libc="$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+          make -j"$(nproc)"
+          make install
+      - name: Build libyuv
+        run: |
+          git clone https://chromium.googlesource.com/libyuv/libyuv build/libyuv
+          cd build/libyuv
+          git checkout "$LIBYUV_COMMIT"
+          cmake -S . -B cmake-build -DBUILD_SHARED_LIBS=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_DISABLE_FIND_PACKAGE_JPEG=ON -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK/build/cmake/android.toolchain.cmake" -DANDROID_ABI=${{ matrix.abi }} -DANDROID_PLATFORM=android-24
+          cmake --build cmake-build -j"$(nproc)"
+      - name: Stage the native libraries
+        run: |
+          mkdir -p "native/${{ matrix.rid }}"
+          cp -L "$(ls build/libvpx-install/lib/libvpx.so* | head -1)" "native/${{ matrix.rid }}/libvpx.so"
+          cp -L "$(ls build/libyuv/cmake-build/libyuv.so* | head -1)" "native/${{ matrix.rid }}/libyuv.so"
+          ls -l "native/${{ matrix.rid }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: native/${{ matrix.rid }}/*
+
+  verify:
+    name: verify (${{ matrix.rid }})
+    needs: [linux, macos]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-14
+            rid: osx-arm64
+          - os: windows-latest
+            rid: win-arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        if: matrix.rid != 'win-arm64'
+        with:
+          name: native-${{ matrix.rid }}
+          path: native/${{ matrix.rid }}
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Build
+        run: dotnet build LibVpxFrameDecoder.slnx
+      - name: Compare frames against ffmpeg
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null; then
+            if [ "$RUNNER_OS" = "Windows" ]; then choco install ffmpeg -y --no-progress; else sudo apt-get install -y ffmpeg; fi
+          fi
+          dotnet run --project tools/FrameDump -- compare tests/assets --ffmpeg ffmpeg
+      - name: Check premultiplied alpha
+        run: dotnet run --project tools/FrameDump -- premultiply tests/assets/spark-alpha.webm --frame 15
+
+  pack:
+    name: pack
+    needs: [linux, macos, android]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Merge the native libraries
+        run: |
+          for directory in artifacts/native-*; do
+            rid="${directory#artifacts/native-}"
+            mkdir -p "native/$rid"
+            cp -R "$directory"/. "native/$rid"/
+          done
+          find native -type f | sort
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Pack the NuGet package
+        run: dotnet pack src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj -c Release -o artifacts/packages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nupkg
+          path: artifacts/packages/*.nupkg
