@@ -86,23 +86,15 @@ jobs:
           path: native/${{ matrix.rid }}/*
 
   macos:
-    name: macos (${{ matrix.rid }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - rid: osx-arm64
-            os: macos-14
-          - rid: osx-x64
-            os: macos-13
+    name: macos (osx-arm64)
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build libvpx
         run: |
           git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
           cd build/libvpx
-          ./configure --target=${{ matrix.rid == 'osx-arm64' && 'arm64-darwin-gcc' || 'x86_64-darwin-gcc' }} --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install"
+          ./configure --target=arm64-darwin-gcc --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install"
           make -j"$(sysctl -n hw.ncpu)"
           make install
       - name: Build libyuv
@@ -114,20 +106,22 @@ jobs:
           cmake --build cmake-build -j"$(sysctl -n hw.ncpu)"
       - name: Stage the native libraries
         run: |
-          mkdir -p "native/${{ matrix.rid }}"
-          cp -L "$(ls build/libvpx-install/lib/libvpx.dylib* | head -1)" "native/${{ matrix.rid }}/libvpx.dylib"
-          cp -L "$(ls build/libyuv/cmake-build/libyuv.dylib* | head -1)" "native/${{ matrix.rid }}/libyuv.dylib"
-          install_name_tool -id @rpath/libvpx.dylib "native/${{ matrix.rid }}/libvpx.dylib"
-          install_name_tool -id @rpath/libyuv.dylib "native/${{ matrix.rid }}/libyuv.dylib"
-          ls -l "native/${{ matrix.rid }}"
+          mkdir -p native/osx-arm64
+          cp -L "$(ls build/libvpx-install/lib/libvpx.dylib* | head -1)" native/osx-arm64/libvpx.dylib
+          cp -L "$(ls build/libyuv/cmake-build/libyuv.dylib* | head -1)" native/osx-arm64/libyuv.dylib
+          install_name_tool -id @rpath/libvpx.dylib native/osx-arm64/libvpx.dylib
+          install_name_tool -id @rpath/libyuv.dylib native/osx-arm64/libyuv.dylib
+          ls -l native/osx-arm64
       - uses: actions/upload-artifact@v4
         with:
-          name: native-${{ matrix.rid }}
-          path: native/${{ matrix.rid }}/*
+          name: native-osx-arm64
+          path: native/osx-arm64/*
 
   android:
     name: android (${{ matrix.rid }})
     runs-on: ubuntu-latest
+    env:
+      VCPKG_FORCE_SYSTEM_BINARIES: 1
     strategy:
       fail-fast: false
       matrix:

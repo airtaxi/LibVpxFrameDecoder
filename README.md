@@ -27,11 +27,11 @@ LibVpxFrameDecoder is a WebM (VP8/VP9) frame decoder for .NET. It calls the nati
 |---|---|---|
 | Windows | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` (MSVC through vcpkg) and shipped with the repository |
 | Linux | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` and packed into the NuGet package |
-| macOS | x64, ARM64 | Built by `.github/workflows/native-libraries.yml` and packed into the NuGet package |
+| macOS (Apple silicon) | ARM64 | Built by `.github/workflows/native-libraries.yml` and packed into the NuGet package |
 | Android | ARM64, x64 | Built by `.github/workflows/native-libraries.yml` (shared libraries for jniLibs) |
 | iOS, Mac Catalyst | ARM64 | Not automated yet. iOS needs static linking, see below |
 
-The assembly resolves `vpx` and `libyuv` from `runtimes/<rid>/native/`, where `<rid>` is the runtime identifier of the running process (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `android-arm64`, `android-x64`). Add a native library pair to a `native/<rid>/` folder in the repository and the build copies it, or extend the workflow with the platform.
+The assembly resolves `vpx` and `libyuv` from `runtimes/<rid>/native/`, where `<rid>` is the runtime identifier of the running process (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-arm64`, `android-arm64`, `android-x64`). Add a native library pair to a `native/<rid>/` folder in the repository and the build copies it, or extend the workflow with the platform. Intel macOS is out of scope.
 
 iOS does not allow shipping dylibs, so libvpx and libyuv have to be linked statically into the app. The resolver then falls back to the main program handle. libyuv exports its color matrices as data symbols, which dlsym may not find in a statically linked binary, so a small C shim that returns those constants is the planned follow-up for iOS and Mac Catalyst.
 

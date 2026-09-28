@@ -27,11 +27,11 @@ LibVpxFrameDecoder는 .NET에서 WebM(VP8/VP9) 영상을 디코딩하는 라이�
 |---|---|---|
 | Windows | x64, ARM64 | 저장소에 포함 (MSVC + vcpkg 빌드) |
 | Linux | x64, ARM64 | `.github/workflows/native-libraries.yml`이 빌드해 NuGet 패키지에 포함 |
-| macOS | x64, ARM64 | `.github/workflows/native-libraries.yml`이 빌드해 NuGet 패키지에 포함 |
+| macOS (Apple silicon) | ARM64 | `.github/workflows/native-libraries.yml`이 빌드해 NuGet 패키지에 포함 |
 | Android | ARM64, x64 | `.github/workflows/native-libraries.yml`이 빌드 (jniLibs용 공유 라이브러리) |
 | iOS, Mac Catalyst | ARM64 | 아직 자동화되지 않음. iOS는 정적 링크 필요(아래 설명) |
 
-어셈블리는 실행 프로세스의 런타임 식별자에 해당하는 `runtimes/<rid>/native/`에서 `vpx`와 `libyuv`를 찾습니다(`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-x64`, `osx-arm64`, `android-arm64`, `android-x64`). 저장소의 `native/<rid>/` 폴더에 네이티브 라이브러리 쌍을 넣으면 빌드가 복사하고, 워크플로에 플랫폼을 추가할 수도 있습니다.
+어셈블리는 실행 프로세스의 런타임 식별자에 해당하는 `runtimes/<rid>/native/`에서 `vpx`와 `libyuv`를 찾습니다(`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-arm64`, `android-arm64`, `android-x64`). 저장소의 `native/<rid>/` 폴더에 네이티브 라이브러리 쌍을 넣으면 빌드가 복사하고, 워크플로에 플랫폼을 추가할 수도 있습니다. Intel macOS는 지원 대상이 아닙니다.
 
 iOS는 dylib 배포가 불가능하므로 libvpx와 libyuv를 앱에 정적으로 링크해야 합니다. 이때 리졸버는 메인 프로그램 핸들로 폴백합니다. libyuv는 색 변환 행렬을 데이터 심볼로 내보내는데, 정적 링크된 바이너리에서는 dlsym이 찾지 못할 수 있어 iOS와 Mac Catalyst용으로 해당 상수를 반환하는 작은 C 심(shim)을 추가하는 것이 다음 계획입니다.
 
