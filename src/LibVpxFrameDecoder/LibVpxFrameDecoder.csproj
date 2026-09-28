@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+	<PropertyGroup>
+		<TargetFramework>net10.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>disable</Nullable>
+		<Platforms>AnyCPU;x64;ARM64</Platforms>
+		<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+		<IsAotCompatible>true</IsAotCompatible>
+		<LangVersion>latest</LangVersion>
+	</PropertyGroup>
+
+	<!-- Copies both platform specific native libraries into runtimes/win-<arch>/native/ so the resolver in
+	     Interop/NativeLibraryResolver.cs can follow the process architecture (native or x64 emulation). -->
+	<ItemGroup>
+		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-x64\vpx.dll" Link="runtimes\win-x64\native\vpx.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-x64\vpx.dll')" />
+		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-x64\libyuv.dll" Link="runtimes\win-x64\native\libyuv.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-x64\libyuv.dll')" />
+		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-arm64\vpx.dll" Link="runtimes\win-arm64\native\vpx.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-arm64\vpx.dll')" />
+		<Content Include="$(MSBuildThisFileDirectory)..\..\native\win-arm64\libyuv.dll" Link="runtimes\win-arm64\native\libyuv.dll" CopyToOutputDirectory="PreserveNewest" Visible="false" Condition="Exists('$(MSBuildThisFileDirectory)..\..\native\win-arm64\libyuv.dll')" />
+	</ItemGroup>
+
+</Project>

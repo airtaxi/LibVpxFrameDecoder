@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="src\LibVpxFrameDecoder\LibVpxFrameDecoder.csproj" Id="LibVpxFrameDecoder" />
+  <Project Path="tools\FrameDump\FrameDump.csproj" Id="FrameDump" />
+</Solution>

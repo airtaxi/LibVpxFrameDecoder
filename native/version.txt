@@ -1,0 +1,8 @@
+libvpx 1.16.0 (vcpkg triplet x64-windows / arm64-windows)
+libyuv 1916 (vcpkg triplet x64-windows / arm64-windows, pinned d98915a654d3564e4802a0004add46221c4e4348)
+pinned request: libvpx 1.16.0
+built: 2026-09-28 17:49:26
+source: https://github.com/webmproject/libvpx
+source: https://chromium.googlesource.com/libyuv/libyuv
+license: libvpx BSD-3-Clause AND ISC (see libvpx-LICENSE.txt and libvpx-PATENTS.txt)
+license: libyuv BSD-3-Clause (see libyuv-LICENSE.txt and libyuv-PATENTS.txt)
