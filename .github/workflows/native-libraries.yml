@@ -186,6 +186,13 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Build
         run: dotnet build LibVpxFrameDecoder.slnx
+      - name: List the native libraries
+        shell: bash
+        run: |
+          echo "--- native ---"
+          find native -type f | sort
+          echo "--- output ---"
+          find tools/FrameDump/bin -path '*runtimes*' -type f | sort
       - name: Compare frames against ffmpeg
         shell: bash
         run: |
@@ -202,7 +209,7 @@ jobs:
 
   pack:
     name: pack
-    needs: [windows, linux, macos, android]
+    needs: [verify, android]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -222,7 +229,18 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Pack the NuGet package
         run: dotnet pack src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj -c Release -o artifacts/packages
-      - uses: actions/upload-artifact@v4
+      - name: Upload the package artifact
+        uses: actions/upload-artifact@v4
         with:
           name: nupkg
           path: artifacts/packages/*.nupkg
+      - name: Push the package to NuGet
+        shell: bash
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "NUGET_API_KEY is not configured, skipping the upload."
+            exit 0
+          fi
+          dotnet nuget push artifacts/packages/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
