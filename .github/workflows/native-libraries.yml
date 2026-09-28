@@ -94,8 +94,7 @@ jobs:
         run: |
           git clone --depth 1 --branch "$LIBVPX_VERSION" https://github.com/webmproject/libvpx.git build/libvpx
           cd build/libvpx
-          export MACOSX_DEPLOYMENT_TARGET=11.0
-          ./configure --target=arm64-darwin-gcc --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install" --extra-cflags="-arch arm64 -isysroot $(xcrun --sdk macosx --show-sdk-path) -mmacosx-version-min=11.0"
+          ./configure --target=arm64-darwin-gcc --enable-shared --disable-static --disable-examples --disable-tools --disable-docs --disable-unit-tests --prefix="$GITHUB_WORKSPACE/build/libvpx-install"
           make -j"$(sysctl -n hw.ncpu)"
           make install
       - name: Build libyuv
