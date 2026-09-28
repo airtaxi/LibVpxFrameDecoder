@@ -94,6 +94,8 @@ dotnet build LibVpxFrameDecoder.slnx -p:Platform=ARM64
 
 `dotnet pack src\LibVpxFrameDecoder\LibVpxFrameDecoder.csproj`로 NuGet 패키지를 만들면 모든 `native\<rid>\` 폴더가 `runtimes\<rid>\native\` 자산으로 들어가고 라이선스 파일도 함께 포함됩니다.
 
+`.github/workflows/native-libraries.yml`은 플랫폼별 네이티브 라이브러리를 빌드하고 NuGet 패키지를 게시합니다. `main`으로 push할 때 `src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj`의 `<Version>`이 올라간 경우에만 실행되며, 수동 실행(게시 여부 선택)도 지원합니다.
+
 ## 사용법
 
 ```csharp

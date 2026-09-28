@@ -94,6 +94,8 @@ The library project copies every `native\<rid>\` folder of the repository into `
 
 `dotnet pack src\LibVpxFrameDecoder\LibVpxFrameDecoder.csproj` produces a NuGet package where every `native\<rid>\` folder becomes a `runtimes\<rid>\native\` asset, together with the license file.
 
+`.github/workflows/native-libraries.yml` builds the native libraries for every platform and publishes the NuGet package. It only runs when the `<Version>` of `src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj` increases on a push to `main`, and it can also be started manually with an optional publish flag.
+
 ## Usage
 
 ```csharp

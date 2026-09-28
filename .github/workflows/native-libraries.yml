@@ -2,25 +2,115 @@ name: native libraries
 
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the packed NuGet package to NuGet.org.
+        required: true
+        default: false
+        type: boolean
   push:
     branches: [main]
     paths:
+      - '.github/workflows/native-libraries.yml'
       - 'native/**'
       - 'ports/**'
       - 'triplets/**'
       - 'scripts/**'
       - 'src/**'
       - 'tests/**'
-      - '.github/workflows/native-libraries.yml'
+      - 'README.md'
+      - 'README.ko.md'
+      - 'LICENSE.txt'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-libraries
+  cancel-in-progress: false
 
 env:
   DOTNET_VERSION: '10.0.x'
   LIBVPX_VERSION: v1.16.0
   LIBYUV_COMMIT: d98915a654d3564e4802a0004add46221c4e4348
+  PACKAGE_PROJECT: src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj
 
 jobs:
+  resolve-version:
+    name: resolve version
+    runs-on: windows-latest
+    outputs:
+      run: ${{ steps.version.outputs.run }}
+      publish: ${{ steps.version.outputs.publish }}
+      current: ${{ steps.version.outputs.current }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Resolve the package version and the publish mode
+        id: version
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+
+          function Get-ProjectVersion([string]$projectPath) {
+            [xml]$project = Get-Content -LiteralPath $projectPath -Raw
+            $version = ($project.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+            if ([string]::IsNullOrWhiteSpace($version)) { throw "Version was not found in $projectPath." }
+            return $version
+          }
+
+          function Get-PreviousProjectVersion([string]$previousCommit, [string]$projectPath) {
+            $previousProjectText = & git show "$previousCommit`:$projectPath" 2>$null
+            if ($LASTEXITCODE -ne 0) { return $null }
+
+            $previousProjectXml = ($previousProjectText -join "`n") -replace "^\uFEFF", ""
+            [xml]$previousProject = $previousProjectXml
+            $previousVersion = ($previousProject.Project.PropertyGroup | Where-Object { $_.Version } | Select-Object -First 1).Version
+            if ([string]::IsNullOrWhiteSpace($previousVersion)) { throw "Previous Version was not found in $projectPath." }
+            return $previousVersion
+          }
+
+          $projectPath = "${{ env.PACKAGE_PROJECT }}"
+          $currentVersion = Get-ProjectVersion $projectPath
+
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $shouldPublish = "${{ inputs.publish }}" -eq "true"
+            "run=true" >> $env:GITHUB_OUTPUT
+            "publish=$($shouldPublish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+            "current=$currentVersion" >> $env:GITHUB_OUTPUT
+            Write-Host "Manual run for version $currentVersion (publish=$shouldPublish)."
+            exit 0
+          }
+
+          $previousCommit = "${{ github.event.before }}"
+          if ([string]::IsNullOrWhiteSpace($previousCommit) -or $previousCommit -match "^0+$") {
+            "run=false" >> $env:GITHUB_OUTPUT
+            "publish=false" >> $env:GITHUB_OUTPUT
+            "current=$currentVersion" >> $env:GITHUB_OUTPUT
+            Write-Host "No previous commit was available, so the build is skipped."
+            exit 0
+          }
+
+          $previousVersion = Get-PreviousProjectVersion $previousCommit $projectPath
+          if ($null -eq $previousVersion) {
+            "run=true" >> $env:GITHUB_OUTPUT
+            "publish=true" >> $env:GITHUB_OUTPUT
+            "current=$currentVersion" >> $env:GITHUB_OUTPUT
+            Write-Host "The package project is new, publishing version $currentVersion."
+            exit 0
+          }
+
+          $shouldPublish = [System.Management.Automation.SemanticVersion]::Parse($currentVersion) -gt [System.Management.Automation.SemanticVersion]::Parse($previousVersion)
+          "run=$($shouldPublish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "publish=$($shouldPublish.ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+          "current=$currentVersion" >> $env:GITHUB_OUTPUT
+          Write-Host "Current=$currentVersion Previous=$previousVersion Publish=$shouldPublish"
+
   windows:
     name: windows (x64, arm64)
+    needs: resolve-version
+    if: needs.resolve-version.outputs.run == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -40,6 +130,8 @@ jobs:
 
   linux:
     name: linux (${{ matrix.rid }})
+    needs: resolve-version
+    if: needs.resolve-version.outputs.run == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -87,6 +179,8 @@ jobs:
 
   macos:
     name: macos (osx-arm64)
+    needs: resolve-version
+    if: needs.resolve-version.outputs.run == 'true'
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +213,6 @@ jobs:
           fi
           codesign --force --sign - native/osx-arm64/libvpx.dylib native/osx-arm64/libyuv.dylib
           ls -l native/osx-arm64
-          otool -l native/osx-arm64/libvpx.dylib | grep -A 4 LC_BUILD_VERSION | head -8
       - uses: actions/upload-artifact@v4
         with:
           name: native-osx-arm64
@@ -127,6 +220,8 @@ jobs:
 
   android:
     name: android (${{ matrix.rid }})
+    needs: resolve-version
+    if: needs.resolve-version.outputs.run == 'true'
     runs-on: ubuntu-latest
     env:
       VCPKG_FORCE_SYSTEM_BINARIES: 1
@@ -171,7 +266,8 @@ jobs:
 
   verify:
     name: verify (${{ matrix.rid }})
-    needs: [windows, linux, macos]
+    needs: [resolve-version, windows, linux, macos]
+    if: needs.resolve-version.outputs.run == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -179,7 +275,7 @@ jobs:
         include:
           - os: ubuntu-latest
             rid: linux-x64
-          - os: macos-14
+          - os: macos-latest
             rid: osx-arm64
           - os: windows-latest
             rid: win-x64
@@ -223,7 +319,8 @@ jobs:
 
   pack:
     name: pack
-    needs: [verify, android]
+    needs: [resolve-version, verify, android]
+    if: needs.resolve-version.outputs.run == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -242,19 +339,26 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Pack the NuGet package
-        run: dotnet pack src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj -c Release -o artifacts/packages
+        run: dotnet pack "$PACKAGE_PROJECT" -c Release -o artifacts/packages
       - name: Upload the package artifact
         uses: actions/upload-artifact@v4
         with:
           name: nupkg
           path: artifacts/packages/*.nupkg
       - name: Push the package to NuGet
+        if: needs.resolve-version.outputs.publish == 'true'
         shell: bash
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          if [ -z "$NUGET_API_KEY" ]; then
-            echo "NUGET_API_KEY is not configured, skipping the upload."
-            exit 0
+          set -euo pipefail
+
+          if [ -z "${NUGET_API_KEY:-}" ]; then
+            echo "NUGET_API_KEY secret is not configured." >&2
+            exit 1
           fi
-          dotnet nuget push artifacts/packages/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json --skip-duplicate
+
+          dotnet nuget push "artifacts/packages/LibVpxFrameDecoder.${{ needs.resolve-version.outputs.current }}.nupkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source "https://api.nuget.org/v3/index.json" \
+            --skip-duplicate
