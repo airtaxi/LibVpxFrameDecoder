@@ -5,8 +5,8 @@ namespace LibVpxFrameDecoder.Interop;
 
 /// <summary>
 /// Resolves vpx.dll, libvpx.so or libvpx.dylib (and the matching libyuv library) from the
-/// runtimes/&lt;rid&gt;/native folder of the output directory. The folder follows the runtime identifier of the
-/// running process, so one build works on every supported platform and architecture.
+/// runtimes/&lt;rid&gt;/native folder of the output directory. The folder follows the platform and architecture of
+/// the running process, so one build works on every supported platform and architecture.
 /// </summary>
 internal static class NativeLibraryResolver
 {
@@ -34,7 +34,9 @@ internal static class NativeLibraryResolver
 	/// </summary>
 	internal static nint LoadLibrary(string libraryName)
 	{
-		foreach (var candidate in GetCandidates(GetFileName(libraryName)))
+		var fileName = GetFileName(libraryName);
+
+		foreach (var candidate in GetCandidates(fileName))
 		{
 			if (NativeLibrary.TryLoad(candidate, out var handle))
 			{
@@ -76,9 +78,35 @@ internal static class NativeLibraryResolver
 	private static IEnumerable<string> GetCandidates(string fileName)
 	{
 		var baseDirectory = AppContext.BaseDirectory;
+		var runtimesDirectory = Path.Combine(baseDirectory, "runtimes");
 
-		yield return Path.Combine(baseDirectory, "runtimes", GetRuntimeIdentifier(), "native", fileName);
+		yield return Path.Combine(runtimesDirectory, GetRuntimeIdentifier(), "native", fileName);
+
+		foreach (var candidate in GetRuntimesDirectoryCandidates(runtimesDirectory, fileName)) yield return candidate;
+
 		yield return Path.Combine(baseDirectory, fileName);
+	}
+
+	/// <summary>
+	/// Accepts any runtimes/&lt;platform&gt;-&lt;architecture&gt; folder as well, because the runtime identifier of the
+	/// process can carry a distribution name (for example ubuntu.24.04-x64) that has no folder of its own.
+	/// </summary>
+	private static IEnumerable<string> GetRuntimesDirectoryCandidates(string runtimesDirectory, string fileName)
+	{
+		if (!Directory.Exists(runtimesDirectory)) yield break;
+
+		var platformPrefix = GetPlatformName();
+		var architectureSuffix = "-" + GetArchitectureName();
+
+		foreach (var directory in Directory.EnumerateDirectories(runtimesDirectory))
+		{
+			var directoryName = Path.GetFileName(directory);
+
+			if (!directoryName.StartsWith(platformPrefix, StringComparison.OrdinalIgnoreCase)) continue;
+			if (!directoryName.EndsWith(architectureSuffix, StringComparison.OrdinalIgnoreCase)) continue;
+
+			yield return Path.Combine(directory, "native", fileName);
+		}
 	}
 
 	private static string GetRuntimeIdentifier()
@@ -87,16 +115,7 @@ internal static class NativeLibraryResolver
 
 		if (!string.IsNullOrEmpty(runtimeIdentifier)) return runtimeIdentifier;
 
-		var architecture = RuntimeInformation.ProcessArchitecture switch
-		{
-			Architecture.X64 => "x64",
-			Architecture.X86 => "x86",
-			Architecture.Arm64 => "arm64",
-			Architecture.Arm => "arm",
-			_ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
-		};
-
-		return GetPlatformName() + "-" + architecture;
+		return GetPlatformName() + "-" + GetArchitectureName();
 	}
 
 	private static string GetPlatformName()
@@ -110,6 +129,15 @@ internal static class NativeLibraryResolver
 
 		return "unknown";
 	}
+
+	private static string GetArchitectureName() => RuntimeInformation.ProcessArchitecture switch
+	{
+		Architecture.X64 => "x64",
+		Architecture.X86 => "x86",
+		Architecture.Arm64 => "arm64",
+		Architecture.Arm => "arm",
+		_ => RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant(),
+	};
 
 	private static bool IsWindows() => RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
