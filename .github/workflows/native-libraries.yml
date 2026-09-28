@@ -398,19 +398,52 @@ jobs:
             </packageSources>
           </configuration>
           EOF
-          dotnet build tests/probes/ios/IosProbe.csproj -c Debug -f net10.0-ios \
+          if ! dotnet build tests/probes/ios/IosProbe.csproj -c Debug -f net10.0-ios \
             -p:RuntimeIdentifier=iossimulator-arm64 \
             -p:LibVpxFrameDecoderProbeVersion="$version" \
-            -p:EnableCodeSigning=false
+            -p:EnableCodeSigning=false \
+            -v:d > build.log 2>&1
+          then
+            echo "dotnet build failed; the tail of build.log:" >&2
+            tail -n 80 build.log >&2
+            exit 1
+          fi
+          echo "build log lines: $(wc -l < build.log)"
       - name: Check the linked app binary
         run: |
           set -euo pipefail
-          binary="$(find tests/probes/ios/bin -type f -name IosProbe -path '*.app/*' | head -1)"
-          echo "binary: $binary"
-          nm -g "$binary" | grep ' _vpx_codec_decode$'
-          nm -g "$binary" | grep ' _I420AlphaToARGBMatrix$'
-          nm -g "$binary" | grep ' _lvpx_yuv_constants$'
-          nm -g "$binary" | grep ' _kYuvI601Constants$'
+          app="$(find tests/probes/ios/bin -type d -name 'IosProbe.app' | head -1)"
+          if [ -z "$app" ]; then
+            echo "the IosProbe.app bundle was not found" >&2
+            exit 1
+          fi
+          echo "app bundle: $app"
+          find "$app" -type f | sort
+
+          # The four symbols prove that all three libraries were force loaded: libvpx, libyuv (a data symbol)
+          # and the shim. They may live in the executable or in a dylib of the bundle, so every Mach-O file of
+          # the bundle is inspected.
+          macho_files="$(find "$app" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && echo "$1"' _ {} \;)"
+          echo "--- Mach-O files ---"
+          printf '%s\n' "$macho_files"
+          symbols_log="$(mktemp)"
+          for file in $macho_files; do nm "$file" 2>/dev/null || true; done > "$symbols_log"
+
+          missing=0
+          for symbol in _vpx_codec_decode _I420AlphaToARGBMatrix _kYuvI601Constants _lvpx_yuv_constants; do
+            if grep -m1 " $symbol\$" "$symbols_log"; then
+              continue
+            fi
+            echo "missing symbol: $symbol" >&2
+            missing=1
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "--- symbol dump (vpx and yuv names) ---"
+            grep -iE 'vpx|yuv' "$symbols_log" | head -20 || true
+            echo "--- native reference evidence from the build log ---"
+            grep -nE 'force_load|libvpx\.a|libyuv\.a|lvpxshim|static/ios' build.log | head -20 || true
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: native-apple-ios
@@ -477,19 +510,52 @@ jobs:
             </packageSources>
           </configuration>
           EOF
-          dotnet build tests/probes/maccatalyst/MacCatalystProbe.csproj -c Debug -f net10.0-maccatalyst \
+          if ! dotnet build tests/probes/maccatalyst/MacCatalystProbe.csproj -c Debug -f net10.0-maccatalyst \
             -p:RuntimeIdentifier=maccatalyst-arm64 \
             -p:LibVpxFrameDecoderProbeVersion="$version" \
-            -p:EnableCodeSigning=false
+            -p:EnableCodeSigning=false \
+            -v:d > build.log 2>&1
+          then
+            echo "dotnet build failed; the tail of build.log:" >&2
+            tail -n 80 build.log >&2
+            exit 1
+          fi
+          echo "build log lines: $(wc -l < build.log)"
       - name: Check the linked app binary
         run: |
           set -euo pipefail
-          binary="$(find tests/probes/maccatalyst/bin -type f -name MacCatalystProbe -path '*.app/*' | head -1)"
-          echo "binary: $binary"
-          nm -g "$binary" | grep ' _vpx_codec_decode$'
-          nm -g "$binary" | grep ' _I420AlphaToARGBMatrix$'
-          nm -g "$binary" | grep ' _lvpx_yuv_constants$'
-          nm -g "$binary" | grep ' _kYuvI601Constants$'
+          app="$(find tests/probes/maccatalyst/bin -type d -name 'MacCatalystProbe.app' | head -1)"
+          if [ -z "$app" ]; then
+            echo "the MacCatalystProbe.app bundle was not found" >&2
+            exit 1
+          fi
+          echo "app bundle: $app"
+          find "$app" -type f | sort
+
+          # The four symbols prove that all three libraries were force loaded: libvpx, libyuv (a data symbol)
+          # and the shim. They may live in the executable or in a dylib of the bundle, so every Mach-O file of
+          # the bundle is inspected.
+          macho_files="$(find "$app" -type f -exec sh -c 'file -b "$1" | grep -q Mach-O && echo "$1"' _ {} \;)"
+          echo "--- Mach-O files ---"
+          printf '%s\n' "$macho_files"
+          symbols_log="$(mktemp)"
+          for file in $macho_files; do nm "$file" 2>/dev/null || true; done > "$symbols_log"
+
+          missing=0
+          for symbol in _vpx_codec_decode _I420AlphaToARGBMatrix _kYuvI601Constants _lvpx_yuv_constants; do
+            if grep -m1 " $symbol\$" "$symbols_log"; then
+              continue
+            fi
+            echo "missing symbol: $symbol" >&2
+            missing=1
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "--- symbol dump (vpx and yuv names) ---"
+            grep -iE 'vpx|yuv' "$symbols_log" | head -20 || true
+            echo "--- native reference evidence from the build log ---"
+            grep -nE 'force_load|libvpx\.a|libyuv\.a|lvpxshim|static/maccatalyst' build.log | head -20 || true
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: native-apple-maccatalyst
