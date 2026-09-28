@@ -111,6 +111,7 @@ jobs:
           cp -L "$(ls build/libyuv/cmake-build/libyuv.dylib* | head -1)" native/osx-arm64/libyuv.dylib
           install_name_tool -id @rpath/libvpx.dylib native/osx-arm64/libvpx.dylib
           install_name_tool -id @rpath/libyuv.dylib native/osx-arm64/libyuv.dylib
+          codesign --force --sign - native/osx-arm64/libvpx.dylib native/osx-arm64/libyuv.dylib
           ls -l native/osx-arm64
       - uses: actions/upload-artifact@v4
         with:
@@ -193,6 +194,12 @@ jobs:
           find native -type f | sort
           echo "--- output ---"
           find tools/FrameDump/bin -path '*runtimes*' -type f | sort
+      - name: Inspect the native libraries
+        shell: bash
+        run: |
+          dotnet run --project tools/FrameDump -- native
+          if [ "$RUNNER_OS" = "Linux" ]; then ldd native/linux-x64/libyuv.so || true; file native/linux-x64/libyuv.so || true; fi
+          if [ "$RUNNER_OS" = "macOS" ]; then codesign -dv native/osx-arm64/libvpx.dylib 2>&1 | head -5 || true; fi
       - name: Compare frames against ffmpeg
         shell: bash
         run: |

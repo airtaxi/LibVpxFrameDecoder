@@ -28,6 +28,7 @@ internal static class Program
 				"compare" => RunCompare(options),
 				"premultiply" => RunPremultiply(options),
 				"concurrent" => RunConcurrent(options),
+				"native" => RunNative(options),
 				"stress" => RunStress(options),
 				"bench" => RunBench(options),
 				"all" => RunAll(options),
@@ -59,6 +60,7 @@ internal static class Program
 			  FrameDump compare <file|dir|pattern>... [--frame N] [--ffmpeg path] [--format rgba|bgra] [--mean 2.0] [--max 8]
 			  FrameDump premultiply <file> [--frame N]
 			  FrameDump concurrent <file>... [--frames 300] [--warmup 60] [--threads N] [--mode sequential|parallel|both]
+			  FrameDump native    prints the native library search paths and their loader results
 			  FrameDump stress  <file> [--cycles 200] [--frames 10]
 			  FrameDump bench   <file> [--warmup 30] [--frames 300] [--threads N]
 			  FrameDump all     <dir|pattern>... [--out dir] [--compare] [--ffmpeg path]
@@ -200,6 +202,13 @@ internal static class Program
 		var passed = maximumDifference <= 1;
 		Console.WriteLine($"{Path.GetFileName(file)} frame {frameIndex} ({straightVideo.Info.Width}x{straightVideo.Info.Height}): max difference={maximumDifference}, pixels off by one or more={differentPixels} -> {(passed ? "PASS" : "FAIL")}");
 		return passed ? 0 : 3;
+	}
+
+	/// <summary>Prints the native library search paths and the loader result of each path.</summary>
+	private static int RunNative(ToolOptions options)
+	{
+		Console.WriteLine(VpxRuntime.DescribeNativeLibraries());
+		return 0;
 	}
 
 	/// <summary>Measures whether several 60 fps videos can be decoded together inside one 60 fps display frame.</summary>

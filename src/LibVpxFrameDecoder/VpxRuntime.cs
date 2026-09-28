@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Text;
 using LibVpxFrameDecoder.Interop;
 
 namespace LibVpxFrameDecoder;
@@ -17,5 +18,23 @@ public static class VpxRuntime
 				return pointer == null ? string.Empty : Marshal.PtrToStringUTF8((nint)pointer) ?? string.Empty;
 			}
 		}
+	}
+
+	/// <summary>
+	/// Reports the runtime identifier of the process and the candidate paths of the native libraries together with
+	/// the loader result of each path. Useful when a platform has no prebuilt binaries for the current runtime.
+	/// </summary>
+	public static string DescribeNativeLibraries()
+	{
+		var description = new StringBuilder();
+
+		description.AppendLine($"runtime identifier: {RuntimeInformation.RuntimeIdentifier}");
+		description.AppendLine($"process architecture: {RuntimeInformation.ProcessArchitecture}");
+		description.AppendLine($"{VpxNative.LibraryName}:");
+		description.Append(NativeLibraryResolver.DescribeCandidates(VpxNative.LibraryName));
+		description.AppendLine($"{YuvNative.LibraryName}:");
+		description.Append(NativeLibraryResolver.DescribeCandidates(YuvNative.LibraryName));
+
+		return description.ToString();
 	}
 }

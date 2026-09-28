@@ -1,5 +1,6 @@
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace LibVpxFrameDecoder.Interop;
 
@@ -47,6 +48,29 @@ internal static class NativeLibraryResolver
 		return NativeLibrary.Load(libraryName);
 	}
 
+	/// <summary>
+	/// Describes the candidate paths of a native library and whether each one loads. Used by
+	/// <see cref="VpxRuntime.DescribeNativeLibraries"/> to diagnose missing platform binaries.
+	/// </summary>
+	internal static string DescribeCandidates(string libraryName)
+	{
+		var description = new StringBuilder();
+
+		foreach (var candidate in GetCandidates(GetFileName(libraryName)))
+		{
+			description.Append("  ").Append(candidate).Append(" -> ");
+
+			try
+			{
+				NativeLibrary.Load(candidate);
+				description.AppendLine("loaded");
+			}
+			catch (Exception exception) { description.AppendLine(exception.Message); }
+		}
+
+		return description.ToString();
+	}
+
 	private static nint Resolve(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
 	{
 		foreach (var candidate in GetCandidates(GetFileName(libraryName)))
@@ -76,6 +100,19 @@ internal static class NativeLibraryResolver
 	}
 
 	private static IEnumerable<string> GetCandidates(string fileName)
+	{
+		var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+		foreach (var candidate in EnumerateCandidates(fileName))
+		{
+			if (seen.Add(candidate))
+			{
+			    yield return candidate;
+			}
+		}
+	}
+
+	private static IEnumerable<string> EnumerateCandidates(string fileName)
 	{
 		var baseDirectory = AppContext.BaseDirectory;
 		var runtimesDirectory = Path.Combine(baseDirectory, "runtimes");
