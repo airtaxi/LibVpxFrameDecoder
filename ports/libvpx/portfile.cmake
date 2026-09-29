@@ -240,7 +240,7 @@ else()
         # VCPKG_DETECTED_CMAKE_C_COMPILER_TARGET. The Android NDK toolchain defaults to armeabi-v7a when the
         # triplet does not set ANDROID_ABI, so the detected target can describe 32 bit ARM while the triplet
         # asked for a 64 bit architecture. The shared library would then silently be a 32 bit ARM binary.
-        # The target triple carries the API level of the triplet; 24 is the value of both Android triplets.
+        # The target triple carries the API level of the triplet; 24 is the value of every Android triplet.
         set(LIBVPX_ANDROID_API_LEVEL 24)
         if(DEFINED VCPKG_CMAKE_SYSTEM_VERSION)
             set(LIBVPX_ANDROID_API_LEVEL ${VCPKG_CMAKE_SYSTEM_VERSION})

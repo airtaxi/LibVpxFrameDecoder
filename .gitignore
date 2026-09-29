@@ -485,6 +485,7 @@ $RECYCLE.BIN/
 # only the license texts, the shim source and the build scripts are tracked under native/. The build scripts
 # write their output into these folders.
 /build/
+/native/android-arm/
 /native/android-arm64/
 /native/android-x64/
 /native/apple/

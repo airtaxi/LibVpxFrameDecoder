@@ -27,11 +27,11 @@ LibVpxFrameDecoder는 .NET에서 WebM(VP8/VP9) 영상을 디코딩하는 라이�
 | Windows | x64, ARM64 | 공유 라이브러리 |
 | Linux | x64, ARM64 | 공유 라이브러리 |
 | macOS (Apple silicon) | ARM64 | 공유 라이브러리 |
-| Android | ARM64, x64 | 공유 라이브러리, libc++ 정적 링크 |
+| Android | ARM32, ARM64, x64 | 공유 라이브러리, libc++ 정적 링크 |
 | iOS | ARM64 | 정적 라이브러리, 기기 및 Apple silicon 시뮬레이터 |
 | Mac Catalyst | ARM64 | 정적 라이브러리 |
 
-바이너리는 모두 `.github/workflows/native-libraries.yml`에서 빌드해 NuGet 패키지에 담습니다. 실행할 때 어셈블리는 프로세스의 런타임 식별자에 맞는 `runtimes/<rid>/native/` 폴더에서 `vpx`와 `libyuv`를 찾습니다(`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-arm64`, `android-arm64`, `android-x64`). 저장소의 `native/<rid>/`에 라이브러리 쌍을 넣으면 빌드가 함께 복사합니다. Intel macOS는 지원하지 않습니다.
+바이너리는 모두 `.github/workflows/native-libraries.yml`에서 빌드해 NuGet 패키지에 담습니다. 실행할 때 어셈블리는 프로세스의 런타임 식별자에 맞는 `runtimes/<rid>/native/` 폴더에서 `vpx`와 `libyuv`를 찾습니다(`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-arm64`, `android-arm`, `android-arm64`, `android-x64`). 저장소의 `native/<rid>/`에 라이브러리 쌍을 넣으면 빌드가 함께 복사합니다. Intel macOS는 지원하지 않습니다.
 
 Android 공유 라이브러리는 `libc++_shared.so` 없이 동작합니다. C++ 런타임을 라이브러리 안에 정적으로 링크했고, LOAD 세그먼트는 최신 기기의 16KB 페이지에 맞게 정렬했습니다.
 

@@ -9,12 +9,12 @@
 		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
 		<SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
-		<RuntimeIdentifiers>android-arm64;android-x64</RuntimeIdentifiers>
+		<RuntimeIdentifiers>android-arm;android-arm64;android-x64</RuntimeIdentifiers>
 	</PropertyGroup>
 
 	<PropertyGroup>
 		<!-- The workflow passes the version of the package it just packed. The default points at the published package. -->
-		<LibVpxFrameDecoderProbeVersion Condition="'$(LibVpxFrameDecoderProbeVersion)' == ''">1.0.2</LibVpxFrameDecoderProbeVersion>
+		<LibVpxFrameDecoderProbeVersion Condition="'$(LibVpxFrameDecoderProbeVersion)' == ''">1.0.3</LibVpxFrameDecoderProbeVersion>
 	</PropertyGroup>
 
 	<ItemGroup>

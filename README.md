@@ -27,11 +27,11 @@ LibVpxFrameDecoder decodes VP8 and VP9 video from WebM files for .NET. It calls 
 | Windows | x64, ARM64 | shared libraries |
 | Linux | x64, ARM64 | shared libraries |
 | macOS (Apple silicon) | ARM64 | shared libraries |
-| Android | ARM64, x64 | shared libraries, static libc++ |
+| Android | ARM32, ARM64, x64 | shared libraries, static libc++ |
 | iOS | ARM64 | static libraries, device and Apple silicon simulator |
 | Mac Catalyst | ARM64 | static libraries |
 
-`.github/workflows/native-libraries.yml` builds all of them and packs them into the NuGet package. At run time the assembly loads `vpx` and `libyuv` from `runtimes/<rid>/native/`, where `<rid>` matches the runtime identifier of the process (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-arm64`, `android-arm64`, `android-x64`). A native library pair added to `native/<rid>/` in the repository is picked up by the build. Intel macOS is out of scope.
+`.github/workflows/native-libraries.yml` builds all of them and packs them into the NuGet package. At run time the assembly loads `vpx` and `libyuv` from `runtimes/<rid>/native/`, where `<rid>` matches the runtime identifier of the process (`win-x64`, `win-arm64`, `linux-x64`, `linux-arm64`, `osx-arm64`, `android-arm`, `android-arm64`, `android-x64`). A native library pair added to `native/<rid>/` in the repository is picked up by the build. Intel macOS is out of scope.
 
 The Android shared libraries do not depend on `libc++_shared.so`, and their LOAD segments are aligned for the 16 KB pages of newer devices.
 

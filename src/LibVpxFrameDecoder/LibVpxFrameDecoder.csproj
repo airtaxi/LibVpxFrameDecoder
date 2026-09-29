@@ -13,7 +13,7 @@
 	<!-- NuGet metadata. The native libraries of every native/<rid> folder are packed as runtimes/<rid>/native assets. -->
 	<PropertyGroup>
 		<PackageId>LibVpxFrameDecoder</PackageId>
-		<Version>1.0.2</Version>
+		<Version>1.0.3</Version>
 		<Authors>Howon Lee</Authors>
 		<Description>WebM (VP8/VP9) frame decoder for .NET with alpha support, built on libvpx and libyuv.</Description>
 		<PackageTags>webm;vp8;vp9;libvpx;libyuv;video;alpha</PackageTags>
