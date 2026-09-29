@@ -5,7 +5,8 @@
 		<OutputType>Exe</OutputType>
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
-		<SupportedOSPlatformVersion>15.0</SupportedOSPlatformVersion>
+		<!-- The Mac Catalyst 27 SDK rejects a deployment target below 17.0. The library itself still targets 15.0. -->
+		<SupportedOSPlatformVersion>17.0</SupportedOSPlatformVersion>
 	</PropertyGroup>
 
 	<PropertyGroup>
