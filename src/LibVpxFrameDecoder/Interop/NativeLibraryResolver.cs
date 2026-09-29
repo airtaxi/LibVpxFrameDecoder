@@ -45,6 +45,9 @@ internal static class NativeLibraryResolver
 			}
 		}
 
+		// iOS and Mac Catalyst link native code into the app binary, so the symbols live in the main program.
+		if (IsIOS() || IsMacCatalyst()) return NativeLibrary.GetMainProgramHandle();
+
 		return NativeLibrary.Load(libraryName);
 	}
 
