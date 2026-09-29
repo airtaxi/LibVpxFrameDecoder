@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -15,6 +16,18 @@ internal static class NativeLibraryResolver
 
 	private static bool s_registered;
 
+	/// <summary>
+	/// Registers the import resolver when the module is loaded. Module initializers run before any P/Invoke can be
+	/// resolved, which matters on iOS and Mac Catalyst: the native code is linked into the main program there, and a
+	/// static constructor of an import type can run too late for the resolution.
+	/// </summary>
+	// CA2255: the resolver must be registered before any import is resolved, and no static constructor of an import
+	// type can guarantee that. A module initializer is the only hook that runs early enough.
+#pragma warning disable CA2255
+	[ModuleInitializer]
+	internal static void Initialize() => EnsureRegistered();
+#pragma warning restore CA2255
+
 	/// <summary>Registers the resolver once for the assembly that declares the native imports.</summary>
 	internal static void EnsureRegistered()
 	{
@@ -24,7 +37,11 @@ internal static class NativeLibraryResolver
 		{
 			if (s_registered) return;
 
-			NativeLibrary.SetDllImportResolver(typeof(NativeLibraryResolver).Assembly, Resolve);
+			// A host may have registered a resolver for this assembly already; the runtime rejects a second one.
+			// Keep the existing registration instead of failing the static constructor that calls this method.
+			try { NativeLibrary.SetDllImportResolver(typeof(NativeLibraryResolver).Assembly, Resolve); }
+			catch (InvalidOperationException) { }
+
 			s_registered = true;
 		}
 	}
