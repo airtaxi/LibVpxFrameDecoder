@@ -38,6 +38,22 @@ public sealed class WebmVideo : IDisposable
 	/// <summary>Pixels of the last decoded frame. Valid until the next read or dispose.</summary>
 	public ReadOnlySpan<byte> Pixels => _pixelBuffer.AsSpan(0, _pixelLength);
 
+	/// <summary>
+	/// Copies the pixels of the last decoded frame into <paramref name="destination"/>.
+	/// This is the fast path for consumers that upload frames into their own buffer: it lowers to a native
+	/// memmove, unlike <c>ReadOnlySpan.CopyTo</c>, which takes a dramatically slower path on the Android runtime.
+	/// </summary>
+	/// <param name="destination">Buffer that receives the pixels. Must be at least <see cref="Pixels"/>.Length bytes long.</param>
+	public void CopyPixelsTo(byte[] destination)
+	{
+		ObjectDisposedException.ThrowIf(_disposed, this);
+		ArgumentNullException.ThrowIfNull(destination);
+
+		if (destination.Length < _pixelLength) throw new ArgumentException($"The destination must be at least {_pixelLength} bytes long.", nameof(destination));
+
+		Array.Copy(_pixelBuffer, destination, _pixelLength);
+	}
+
 	/// <summary>Time spent inside libvpx while producing the last frame, including skipped frames. Zero when the stream ended.</summary>
 	public TimeSpan LastDecodeTime { get; private set; }
 
@@ -68,7 +84,7 @@ public sealed class WebmVideo : IDisposable
 		while (_demuxer.TryReadPacket(out var packet))
 		{
 			// Invisible frames produce no output but must still be decoded so later frames stay correct.
-			if (!_decoder.TryDecode(_demuxer.PacketData, _demuxer.AlphaPacketData, out var image)) continue;
+			if (!_decoder.TryDecode(_demuxer.PacketData, _demuxer.AlphaPacketSegment, out var image)) continue;
 			if (packet.Timestamp < _skipUntil) continue;
 
 			_skipUntil = TimeSpan.MinValue;

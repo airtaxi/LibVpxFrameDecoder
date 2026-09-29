@@ -86,7 +86,7 @@ video.Seek(TimeSpan.FromSeconds(2.5));
 video.Rewind();
 ```
 
-`Pixels`와 `PixelBuffer`는 다음 프레임을 읽거나 객체를 해제할 때까지 유효합니다.
+`Pixels`와 `PixelBuffer`는 다음 프레임을 읽거나 객체를 해제할 때까지 유효합니다. 프레임을 직접 준비한 버퍼로 옮길 때는 `CopyPixelsTo`를 사용합니다. 이 메서드는 내부적으로 네이티브 memmove를 호출하지만, Android에서는 `Pixels.CopyTo`가 훨씬 느린 경로로 컴파일됩니다.
 
 ### 옵션
 
@@ -99,7 +99,7 @@ video.Rewind();
 
 ### API 요약
 
-- `WebmVideo`: 파일을 열고 프레임을 읽고 시크합니다. 디코더와 픽셀 버퍼를 함께 소유합니다.
+- `WebmVideo`: 파일을 열고 프레임을 읽고 시크합니다. 디코더와 픽셀 버퍼를 함께 소유합니다. 알파 프레임은 전용 워커 스레드에서 컬러 프레임과 병렬로 디코딩됩니다.
 - `WebmVideoInfo`: 코덱 ID, 크기, 재생 시간, 프레임 레이트, 알파 모드.
 - `VpxFrameInfo`: 디코딩한 프레임의 타임스탬프와 크기.
 - `VpxFrameDecoderOptions`: 디코딩과 변환 옵션.

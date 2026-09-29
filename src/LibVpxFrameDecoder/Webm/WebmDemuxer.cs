@@ -38,7 +38,8 @@ internal sealed class WebmDemuxer : IDisposable
 
 	internal ReadOnlySpan<byte> PacketData => _blockBuffer.AsSpan(_blockOffset, _blockLength);
 
-	internal ReadOnlySpan<byte> AlphaPacketData => _alphaBuffer.AsSpan(_alphaOffset, _alphaLength);
+	/// <summary>The alpha packet as a segment so it can be handed to the parallel alpha decode thread.</summary>
+	internal ArraySegment<byte> AlphaPacketSegment => new(_alphaBuffer, _alphaOffset, _alphaLength);
 
 	internal static WebmDemuxer Open(string filePath)
 	{

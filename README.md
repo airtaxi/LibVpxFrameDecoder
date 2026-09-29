@@ -86,7 +86,8 @@ video.Seek(TimeSpan.FromSeconds(2.5));
 video.Rewind();
 ```
 
-`Pixels` and `PixelBuffer` stay valid until the next read or dispose.
+`Pixels` and `PixelBuffer` stay valid until the next read or dispose. To move a frame into your own buffer, use
+`CopyPixelsTo`, which lowers to a native memmove; on Android, `Pixels.CopyTo` compiles to a path that is an order of magnitude slower.
 
 ### Options
 
@@ -99,7 +100,7 @@ video.Rewind();
 
 ### API summary
 
-- `WebmVideo`: opens a file, reads frames, seeks, and owns the decoder and the pixel buffer.
+- `WebmVideo`: opens a file, reads frames, seeks, and owns the decoder and the pixel buffer. Alpha frames are decoded in parallel with the color frames on a dedicated worker thread.
 - `WebmVideoInfo`: codec id, size, duration, frame rate and alpha mode.
 - `VpxFrameInfo`: timestamp and geometry of one decoded frame.
 - `VpxFrameDecoderOptions`: decoding and conversion options.
