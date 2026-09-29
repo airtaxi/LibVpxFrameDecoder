@@ -11,3 +11,7 @@ set(VCPKG_CMAKE_SYSTEM_VERSION 24)
 # overlay port passes --disable-neon to its own configure step. The ABI and the 16 KB page size support are
 # set explicitly.
 set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=armeabi-v7a -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON)
+
+# The NDK aligns the 64 bit libraries for the 16 KB pages of newer devices but leaves this 32 bit ABI at
+# 4 KB, so the alignment is forced here and every Android library of the package keeps the same contract.
+set(VCPKG_LINKER_FLAGS "-Wl,-z,max-page-size=16384")
