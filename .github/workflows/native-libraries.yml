@@ -62,6 +62,9 @@ concurrency:
 
 env:
   DOTNET_VERSION: '10.0.x'
+  # The .NET for iOS validation requires the Xcode major/minor to match the workload set exactly. The Apple jobs
+  # run on the xcode-27 image (default Xcode 27.0) and pin the workload set that pairs with it.
+  WORKLOAD_SET_VERSION: '10.0.401.1'
   LIBVPX_VERSION: v1.16.0
   LIBYUV_COMMIT: d98915a654d3564e4802a0004add46221c4e4348
   PACKAGE_PROJECT: src/LibVpxFrameDecoder/LibVpxFrameDecoder.csproj
@@ -329,7 +332,7 @@ jobs:
     name: ios (device, simulator)
     needs: resolve-version
     if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.ios == 'true'
-    runs-on: macos-latest
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - name: Select a full Xcode
@@ -383,7 +386,7 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Install the iOS workload
-        run: dotnet workload install ios
+        run: dotnet workload install ios --version "${{ env.WORKLOAD_SET_VERSION }}"
       - name: Build the probe app
         run: |
           set -euo pipefail
@@ -460,7 +463,7 @@ jobs:
     name: maccatalyst (arm64)
     needs: resolve-version
     if: needs.resolve-version.outputs.run == 'true' && needs.resolve-version.outputs.maccatalyst == 'true'
-    runs-on: macos-latest
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
       - name: Select a full Xcode
@@ -502,7 +505,7 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
       - name: Install the Mac Catalyst workload
-        run: dotnet workload install maccatalyst
+        run: dotnet workload install maccatalyst --version "${{ env.WORKLOAD_SET_VERSION }}"
       - name: Build the probe app
         run: |
           set -euo pipefail
