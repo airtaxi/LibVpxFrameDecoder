@@ -6,7 +6,8 @@ set(VCPKG_CRT_LINKAGE static)
 set(VCPKG_LIBRARY_LINKAGE dynamic)
 set(VCPKG_CMAKE_SYSTEM_NAME Android)
 set(VCPKG_CMAKE_SYSTEM_VERSION 24)
-# armeabi-v7a is the 32 bit ARM ABI. NEON stays off, matching the upstream vcpkg arm-android triplet; the
-# libvpx overlay port also builds its ARM Android target without NEON. The ABI and the 16 KB page size
-# support are set explicitly.
-set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=armeabi-v7a -DANDROID_ARM_NEON=OFF -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON)
+# armeabi-v7a is the 32 bit ARM ABI. Neon stays on, because current Android NDKs reject ANDROID_ARM_NEON=OFF
+# with "Disabling Neon is no longer supported", and every device that runs API 24 supports it. The libvpx
+# overlay port passes --disable-neon to its own configure step. The ABI and the 16 KB page size support are
+# set explicitly.
+set(VCPKG_CMAKE_CONFIGURE_OPTIONS -DANDROID_ABI=armeabi-v7a -DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON)
