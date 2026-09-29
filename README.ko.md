@@ -1,6 +1,7 @@
 # LibVpxFrameDecoder
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+[![NuGet](https://img.shields.io/nuget/v/LibVpxFrameDecoder.svg)](https://www.nuget.org/packages/LibVpxFrameDecoder)
 
 🌐 [English](README.md) | 한국어
 
@@ -64,6 +65,8 @@ bash scripts/build-native-apple-static.sh maccatalyst
 결과물은 `native/apple/`에 만들어지며 저장소에는 커밋하지 않습니다. `.github/workflows/native-libraries.yml`이 모든 플랫폼의 바이너리를 빌드해 NuGet 패키지에 넣고, `main`에 push할 때는 라이브러리 프로젝트의 `<Version>`이 올라간 경우에만 실행됩니다. `tests/probes/`의 최소 앱으로 패키지를 끝까지 검증하는 일도 이 워크플로가 맡습니다.
 
 ## 사용법
+
+NuGet에서 패키지를 설치한 뒤 사용합니다(`dotnet add package LibVpxFrameDecoder`).
 
 ```csharp
 using LibVpxFrameDecoder;
@@ -142,6 +145,8 @@ LibVpxFrameDecoder는 [MIT License](LICENSE.txt)로 배포됩니다.
 
 ## 서드파티 고지
 
-`native/` 아래 네이티브 라이브러리는 [libvpx](https://github.com/webmproject/libvpx) 빌드 결과물입니다. `BSD-3-Clause AND ISC` 라이선스가 적용되고 VP8, VP9에 대한 Google WebM 특허 그랜트가 함께 적용됩니다. 라이선스와 특허 전문은 바이너리와 함께 배포됩니다(`native/libvpx-LICENSE.txt`, `native/libvpx-PATENTS.txt`).
+패키지에 들어 있는 libvpx 바이너리(`runtimes/<rid>/native/`와 iOS, Mac Catalyst용 `static/` 정적 라이브러리)는 [libvpx](https://github.com/webmproject/libvpx) 빌드 결과물입니다. `BSD-3-Clause AND ISC` 라이선스가 적용되고 VP8, VP9에 대한 Google WebM 특허 그랜트가 함께 적용됩니다. 라이선스와 특허 전문은 패키지의 `native/libvpx-LICENSE.txt`, `native/libvpx-PATENTS.txt`에 들어 있습니다.
 
-`native/libyuv.dll`은 [libyuv](https://chromium.googlesource.com/libyuv/libyuv) 빌드 결과물입니다. BSD 계열 라이선스에 추가 특허 그랜트가 적용됩니다. 전문은 바이너리와 함께 배포됩니다(`native/libyuv-LICENSE.txt`, `native/libyuv-PATENTS.txt`).
+libyuv 바이너리도 패키지에 함께 들어 있으며 [libyuv](https://chromium.googlesource.com/libyuv/libyuv) 빌드 결과물입니다. BSD 계열 라이선스에 추가 특허 그랜트가 적용됩니다. 전문은 `native/libyuv-LICENSE.txt`, `native/libyuv-PATENTS.txt`에 들어 있습니다.
+
+Android 공유 라이브러리는 LLVM libc++ 런타임을 정적으로 포함하므로, 앱에 `libc++_shared.so`가 필요하지 않습니다. libc++는 Apache License v2.0 with LLVM Exceptions로 배포되며, 전문은 패키지의 `native/libcxx-LICENSE.txt`에 들어 있습니다.

@@ -64,11 +64,12 @@
 	<ItemGroup>
 		<None Include="$(MSBuildThisFileDirectory)..\..\LICENSE.txt" Pack="true" PackagePath="" Visible="false" />
 		<None Include="$(MSBuildThisFileDirectory)..\..\README.md" Pack="true" PackagePath="" Visible="false" />
-		<!-- The native binaries ship with their license and patent texts, as the BSD style licenses require. -->
+		<!-- The native binaries ship with their license and patent texts, as the licenses require. -->
 		<None Include="$(MSBuildThisFileDirectory)..\..\native\libvpx-LICENSE.txt" Pack="true" PackagePath="native/" Visible="false" />
 		<None Include="$(MSBuildThisFileDirectory)..\..\native\libvpx-PATENTS.txt" Pack="true" PackagePath="native/" Visible="false" />
 		<None Include="$(MSBuildThisFileDirectory)..\..\native\libyuv-LICENSE.txt" Pack="true" PackagePath="native/" Visible="false" />
 		<None Include="$(MSBuildThisFileDirectory)..\..\native\libyuv-PATENTS.txt" Pack="true" PackagePath="native/" Visible="false" />
+		<None Include="$(MSBuildThisFileDirectory)..\..\native\libcxx-LICENSE.txt" Pack="true" PackagePath="native/" Visible="false" />
 		<!-- Links the static Apple libraries into the apps that consume the package. -->
 		<None Include="$(MSBuildThisFileDirectory)..\..\buildTransitive\LibVpxFrameDecoder.targets" Pack="true" PackagePath="buildTransitive/" Visible="false" />
 	</ItemGroup>

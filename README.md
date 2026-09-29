@@ -1,6 +1,7 @@
 # LibVpxFrameDecoder
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.txt)
+[![NuGet](https://img.shields.io/nuget/v/LibVpxFrameDecoder.svg)](https://www.nuget.org/packages/LibVpxFrameDecoder)
 
 🌐 English | [한국어](README.ko.md)
 
@@ -64,6 +65,8 @@ bash scripts/build-native-apple-static.sh maccatalyst
 The script writes them into `native/apple/`. Built libraries are not committed: `.github/workflows/native-libraries.yml` builds them for every platform and packs the package, and a push to `main` runs it only when the `<Version>` of the library project increases. The workflow also builds the apps under `tests/probes/` to verify the NuGet package end to end.
 
 ## Usage
+
+Install the package from NuGet (`dotnet add package LibVpxFrameDecoder`) and use it:
 
 ```csharp
 using LibVpxFrameDecoder;
@@ -142,6 +145,8 @@ LibVpxFrameDecoder is licensed under the [MIT License](LICENSE.txt).
 
 ## Third-party notices
 
-The native libraries under `native/` are builds of [libvpx](https://github.com/webmproject/libvpx), licensed under `BSD-3-Clause AND ISC` and covered by the Google WebM patent grant for VP8 and VP9. The license and patent texts ship with the binaries (`native/libvpx-LICENSE.txt`, `native/libvpx-PATENTS.txt`).
+The libvpx binaries in the package (`runtimes/<rid>/native/`, plus the iOS and Mac Catalyst static libraries under `static/`) are builds of [libvpx](https://github.com/webmproject/libvpx), licensed under `BSD-3-Clause AND ISC` and covered by the Google WebM patent grant for VP8 and VP9. The license and patent texts are in the package at `native/libvpx-LICENSE.txt` and `native/libvpx-PATENTS.txt`.
 
-`native/libyuv.dll` is a build of [libyuv](https://chromium.googlesource.com/libyuv/libyuv), licensed under a BSD style license with an additional patent grant. The texts ship with the binary (`native/libyuv-LICENSE.txt`, `native/libyuv-PATENTS.txt`).
+The libyuv binaries are builds of [libyuv](https://chromium.googlesource.com/libyuv/libyuv), licensed under a BSD style license with an additional patent grant. The texts are in the package at `native/libyuv-LICENSE.txt` and `native/libyuv-PATENTS.txt`.
+
+On Android the shared libraries embed the LLVM libc++ runtime statically, so the app does not need `libc++_shared.so`. libc++ is licensed under the Apache License v2.0 with LLVM Exceptions; the text is in the package at `native/libcxx-LICENSE.txt`.
